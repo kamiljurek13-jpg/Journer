@@ -30,6 +30,7 @@ export function ChatPanel({ entry }: ChatPanelProps) {
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [chatError, setChatError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,10 +59,20 @@ export function ChatPanel({ entry }: ChatPanelProps) {
   async function handleSend() {
     if (!input.trim() || !entry || streaming) return;
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) return;
+    setChatError(null);
+
+    // getUser() verifies the token server-side and triggers a refresh if needed
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setChatError("Sesja wygasła — zaloguj się ponownie.");
+      return;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setChatError("Sesja wygasła — zaloguj się ponownie.");
+      return;
+    }
 
     const userMessage = input.trim();
     setInput("");
@@ -85,6 +96,11 @@ export function ChatPanel({ entry }: ChatPanelProps) {
       });
 
       if (!res.ok || !res.body) {
+        setChatError(
+          res.status === 401
+            ? "Sesja wygasła — zaloguj się ponownie."
+            : "Błąd połączenia z Ryanem. Spróbuj ponownie."
+        );
         setStreaming(false);
         return;
       }
@@ -119,6 +135,7 @@ export function ChatPanel({ entry }: ChatPanelProps) {
       setStreamingText("");
     } catch (err) {
       console.error("Chat error:", err);
+      setChatError("Błąd połączenia z Ryanem. Spróbuj ponownie.");
     } finally {
       setStreaming(false);
     }
@@ -200,6 +217,10 @@ export function ChatPanel({ entry }: ChatPanelProps) {
 
             <div ref={messagesEndRef} />
           </div>
+
+          {chatError && (
+            <p className="text-xs text-destructive">{chatError}</p>
+          )}
 
           <div className="flex gap-2">
             <Input

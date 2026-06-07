@@ -5,5 +5,5 @@ import { createClient } from "@supabase/supabase-js";
 // real values — add them in Vercel → Settings → Environment Variables.
 export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co",
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "placeholder-anon-key"
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "placeholder-key"
 );
