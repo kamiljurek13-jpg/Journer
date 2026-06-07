@@ -50,9 +50,9 @@ export default function EntryPage() {
       ) : (
         <>
           <div className="flex flex-col gap-1">
-            <p className="text-3xl font-light">{formatDisplayDate(entry.date)}</p>
+            <p className="text-3xl font-light font-serif">{formatDisplayDate(entry.date)}</p>
             {entry.title && (
-              <h1 className="text-xl font-medium mt-1">{entry.title}</h1>
+              <h1 className="text-xl font-medium font-serif mt-1">{entry.title}</h1>
             )}
             <div className="mt-2">
               <Badge variant="secondary">

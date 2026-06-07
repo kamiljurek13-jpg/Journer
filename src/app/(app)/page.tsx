@@ -59,7 +59,7 @@ export default function TodayPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <p className="text-4xl font-light">{formatDisplayDate(today)}</p>
+        <p className="text-4xl font-light font-serif">{formatDisplayDate(today)}</p>
         {todayEntry && (
           <p className="text-sm text-muted-foreground mt-1">Edytujesz wpis z dziś</p>
         )}

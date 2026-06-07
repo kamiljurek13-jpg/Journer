@@ -33,7 +33,7 @@ export default function LoginPage() {
   return (
     <div className="flex flex-col gap-6 w-full max-w-sm">
       <div>
-        <h1 className="text-2xl font-light">Zaloguj się</h1>
+        <h1 className="text-2xl font-light font-serif">Zaloguj się</h1>
         <p className="text-sm text-muted-foreground mt-1">do Journer</p>
       </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">

@@ -34,7 +34,7 @@ export default function SignupPage() {
   if (done) {
     return (
       <div className="flex flex-col gap-6 w-full max-w-sm">
-        <h1 className="text-2xl font-light">Sprawdź skrzynkę</h1>
+        <h1 className="text-2xl font-light font-serif">Sprawdź skrzynkę</h1>
         <p className="text-sm text-muted-foreground">
           Wysłaliśmy link aktywacyjny na{" "}
           <strong className="text-foreground">{email}</strong>. Kliknij go,
@@ -52,7 +52,7 @@ export default function SignupPage() {
   return (
     <div className="flex flex-col gap-6 w-full max-w-sm">
       <div>
-        <h1 className="text-2xl font-light">Utwórz konto</h1>
+        <h1 className="text-2xl font-light font-serif">Utwórz konto</h1>
         <p className="text-sm text-muted-foreground mt-1">Journer</p>
       </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">

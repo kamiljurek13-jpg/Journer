@@ -106,7 +106,7 @@ export default function SettingsPage() {
   return (
     <main className="max-w-2xl mx-auto px-4 py-10 space-y-10">
       <div>
-        <h1 className="text-xl font-semibold">Ustawienia</h1>
+        <h1 className="text-xl font-semibold font-serif">Ustawienia</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Zarządzaj tokenami dostępu do API.
         </p>
