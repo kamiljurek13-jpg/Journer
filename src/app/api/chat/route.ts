@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 import { buildSystemPrompt } from "@/lib/chatSystemPrompt";
+import { GET_ENTRY_TOOL, MOOD_LABELS } from "@/lib/chat-agent";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,30 +10,6 @@ export const runtime = "nodejs";
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "",
 });
-
-const GET_ENTRY_TOOL: Anthropic.Tool = {
-  name: "get_entry",
-  description:
-    "Pobierz wpis dziennika użytkownika z konkretnego dnia. Użyj gdy user wspomina datę lub chcesz porównać wpisy.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      date: {
-        type: "string",
-        description: "Data wpisu w formacie YYYY-MM-DD, np. '2026-06-01'",
-      },
-    },
-    required: ["date"],
-  },
-};
-
-const MOOD_LABELS: Record<number, string> = {
-  1: "Very bad",
-  2: "Bad",
-  3: "Okay",
-  4: "Good",
-  5: "Great",
-};
 
 interface ChatRequestBody {
   entryId: string;

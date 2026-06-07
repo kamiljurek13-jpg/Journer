@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FileText } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 export function AppHeader() {
@@ -27,6 +28,19 @@ export function AppHeader() {
           className="text-sm font-medium hover:text-muted-foreground transition-colors"
         >
           Dziennik
+        </Link>
+        <Link
+          href="/settings"
+          className="text-sm font-medium hover:text-muted-foreground transition-colors"
+        >
+          Ustawienia
+        </Link>
+        <Link
+          href="/docs"
+          className="text-sm font-medium hover:text-muted-foreground transition-colors"
+          title="Dokumentacja API"
+        >
+          <FileText size={15} />
         </Link>
         <div className="ml-auto flex items-center gap-4">
           {user?.email && (
