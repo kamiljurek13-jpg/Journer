@@ -40,6 +40,11 @@ export default function EntryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry?.id]);
 
+  const isDirty =
+    title !== (entry?.title ?? "") ||
+    body !== (entry?.body ?? "") ||
+    mood !== (entry?.mood ?? null);
+
   async function handleSave() {
     if (!entry || !body || !mood) return;
     setSaving(true);
@@ -56,6 +61,14 @@ export default function EntryPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleCancel() {
+    if (!entry) return;
+    setTitle(entry.title ?? "");
+    setBody(entry.body);
+    setMood(entry.mood);
+    setEditorKey((k) => k + 1);
   }
 
   const canSave = body.replace(/<[^>]+>/g, "").trim().length > 0 && mood !== null;
@@ -93,6 +106,11 @@ export default function EntryPage() {
             <Button onClick={handleSave} disabled={!canSave || saving}>
               {saving ? "Zapisuję..." : "Zapisz"}
             </Button>
+            {isDirty && (
+              <Button variant="outline" onClick={handleCancel} disabled={saving}>
+                Anuluj
+              </Button>
+            )}
             {saved && (
               <span className="text-sm text-muted-foreground">Zapisano!</span>
             )}
