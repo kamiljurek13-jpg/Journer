@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEntries } from "@/hooks/useEntries";
 import { EntryListItem } from "@/components/entries/EntryListItem";
 import { WeekStrip } from "@/components/entries/WeekStrip";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { todayString, formatDisplayDate } from "@/lib/dates";
 
 export default function JournalPage() {
@@ -55,9 +55,9 @@ export default function JournalPage() {
               : `Brak wpisu na ${formatDisplayDate(selectedDate)}.`}
           </p>
           {isToday && (
-            <Button asChild variant="outline" size="sm">
-              <Link href="/">Napisz wpis</Link>
-            </Button>
+            <Link href="/" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Napisz wpis
+            </Link>
           )}
         </div>
       )}
