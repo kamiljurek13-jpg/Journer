@@ -1,39 +1,64 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { MoodSelector } from "@/components/mood/MoodSelector";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { useEntries } from "@/hooks/useEntries";
 import { formatDisplayDate } from "@/lib/dates";
+import type { Mood } from "@/types/entry";
 
 const TiptapEditor = dynamic(
   () => import("@/components/editor/TiptapEditor").then((m) => m.TiptapEditor),
   { ssr: false }
 );
 
-const MOOD_EMOJI: Record<number, string> = {
-  1: "😞",
-  2: "😕",
-  3: "😐",
-  4: "🙂",
-  5: "😄",
-};
-
-const MOOD_LABEL: Record<number, string> = {
-  1: "Bardzo źle",
-  2: "Źle",
-  3: "Średnio",
-  4: "Dobrze",
-  5: "Świetnie",
-};
-
 export default function EntryPage() {
   const { id } = useParams<{ id: string }>();
-  const { getEntryById } = useEntries();
+  const { getEntryById, saveEntry } = useEntries();
   const entry = getEntryById(id);
+
+  const [title, setTitle] = useState(entry?.title ?? "");
+  const [body, setBody] = useState(entry?.body ?? "");
+  const [mood, setMood] = useState<Mood | null>(entry?.mood ?? null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
+
+  useEffect(() => {
+    if (entry) {
+      setTitle(entry.title ?? "");
+      setBody(entry.body);
+      setMood(entry.mood);
+      setEditorKey((k) => k + 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry?.id]);
+
+  async function handleSave() {
+    if (!entry || !body || !mood) return;
+    setSaving(true);
+    try {
+      await saveEntry({
+        id: entry.id,
+        date: entry.date,
+        title: title.trim() || undefined,
+        body,
+        mood,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const canSave = body.replace(/<[^>]+>/g, "").trim().length > 0 && mood !== null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,26 +67,36 @@ export default function EntryPage() {
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft size={16} />
-        Dziennik
+        Journer
       </Link>
 
       {!entry ? (
         <p className="text-muted-foreground">Nie znaleziono wpisu.</p>
       ) : (
         <>
-          <div className="flex flex-col gap-1">
-            <p className="text-3xl font-light font-serif">{formatDisplayDate(entry.date)}</p>
-            {entry.title && (
-              <h1 className="text-xl font-medium font-serif mt-1">{entry.title}</h1>
-            )}
-            <div className="mt-2">
-              <Badge variant="secondary">
-                {MOOD_EMOJI[entry.mood]} {MOOD_LABEL[entry.mood]}
-              </Badge>
-            </div>
+          <p className="text-3xl font-light font-serif">{formatDisplayDate(entry.date)}</p>
+
+          <Input
+            placeholder="Tytuł (opcjonalnie)"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+
+          <TiptapEditor key={editorKey} content={body} onChange={setBody} />
+
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-muted-foreground">Jak minął dzień?</p>
+            <MoodSelector value={mood} onChange={setMood} />
           </div>
 
-          <TiptapEditor content={entry.body} editable={false} />
+          <div className="flex items-center gap-4">
+            <Button onClick={handleSave} disabled={!canSave || saving}>
+              {saving ? "Zapisuję..." : "Zapisz"}
+            </Button>
+            {saved && (
+              <span className="text-sm text-muted-foreground">Zapisano!</span>
+            )}
+          </div>
 
           <ChatPanel
             entry={{

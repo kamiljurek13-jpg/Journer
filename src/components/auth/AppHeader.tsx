@@ -18,16 +18,10 @@ export function AppHeader() {
     <header className="border-b">
       <nav className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-6">
         <Link
-          href="/"
-          className="text-sm font-medium hover:text-muted-foreground transition-colors"
-        >
-          Dziś
-        </Link>
-        <Link
           href="/journal"
           className="text-sm font-medium hover:text-muted-foreground transition-colors"
         >
-          Dziennik
+          Journer
         </Link>
         <Link
           href="/settings"
