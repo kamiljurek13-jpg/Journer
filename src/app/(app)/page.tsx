@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MoodSelector } from "@/components/mood/MoodSelector";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { useEntries } from "@/hooks/useEntries";
 import { todayString, formatDisplayDate } from "@/lib/dates";
 import type { Mood } from "@/types/entry";
@@ -85,6 +86,20 @@ export default function TodayPage() {
           <span className="text-sm text-muted-foreground">Zapisano!</span>
         )}
       </div>
+
+      <ChatPanel
+        entry={
+          todayEntry
+            ? {
+                id: todayEntry.id,
+                date: todayEntry.date,
+                title: todayEntry.title,
+                body: todayEntry.body,
+                mood: todayEntry.mood,
+              }
+            : null
+        }
+      />
     </div>
   );
 }

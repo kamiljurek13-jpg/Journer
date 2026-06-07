@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { useEntries } from "@/hooks/useEntries";
 import { formatDisplayDate } from "@/lib/dates";
 
@@ -61,6 +62,16 @@ export default function EntryPage() {
           </div>
 
           <TiptapEditor content={entry.body} editable={false} />
+
+          <ChatPanel
+            entry={{
+              id: entry.id,
+              date: entry.date,
+              title: entry.title,
+              body: entry.body,
+              mood: entry.mood,
+            }}
+          />
         </>
       )}
     </div>
