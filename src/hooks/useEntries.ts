@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { getEntries, setEntries } from "@/lib/storage";
+import { fetchAllEntries, createEntry, updateEntry } from "@/lib/db";
 import { todayString } from "@/lib/dates";
 import type { Entry, Mood } from "@/types/entry";
 
@@ -12,17 +12,24 @@ type SavePayload = Omit<Entry, "id" | "createdAt" | "updatedAt"> & {
 
 interface UseEntriesReturn {
   entries: Entry[];
+  loading: boolean;
+  error: string | null;
   getTodayEntry: () => Entry | undefined;
   getEntryById: (id: string) => Entry | undefined;
-  saveEntry: (data: SavePayload) => void;
+  saveEntry: (data: SavePayload) => Promise<void>;
 }
 
 export function useEntries(): UseEntriesReturn {
-  const [entries, setEntriesState] = useState<Entry[]>(() => getEntries());
+  const [entries, setEntriesState] = useState<Entry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setEntries(entries);
-  }, [entries]);
+    fetchAllEntries()
+      .then(setEntriesState)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
+  }, []);
 
   function getTodayEntry(): Entry | undefined {
     return entries.find((e) => e.date === todayString());
@@ -32,29 +39,32 @@ export function useEntries(): UseEntriesReturn {
     return entries.find((e) => e.id === id);
   }
 
-  function saveEntry(data: SavePayload): void {
+  async function saveEntry(data: SavePayload): Promise<void> {
     const now = new Date().toISOString();
-    setEntriesState((prev) => {
-      if (data.id) {
-        return prev.map((e) =>
-          e.id === data.id
-            ? { ...e, ...data, id: e.id, createdAt: e.createdAt, updatedAt: now }
-            : e
-        );
-      } else {
-        const newEntry: Entry = {
-          id: uuidv4(),
-          date: data.date,
-          title: data.title,
-          body: data.body,
-          mood: data.mood as Mood,
-          createdAt: now,
-          updatedAt: now,
-        };
-        return [...prev, newEntry];
-      }
-    });
+    if (data.id) {
+      const updated = await updateEntry(data.id, {
+        title: data.title,
+        body: data.body,
+        mood: data.mood,
+        updatedAt: now,
+      });
+      setEntriesState((prev) =>
+        prev.map((e) => (e.id === data.id ? updated : e))
+      );
+    } else {
+      const newEntry: Entry = {
+        id: uuidv4(),
+        date: data.date,
+        title: data.title,
+        body: data.body,
+        mood: data.mood as Mood,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const saved = await createEntry(newEntry);
+      setEntriesState((prev) => [...prev, saved]);
+    }
   }
 
-  return { entries, getTodayEntry, getEntryById, saveEntry };
+  return { entries, loading, error, getTodayEntry, getEntryById, saveEntry };
 }

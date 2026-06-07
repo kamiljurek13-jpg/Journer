@@ -23,6 +23,7 @@ export default function TodayPage() {
   const [body, setBody] = useState(todayEntry?.body ?? "");
   const [mood, setMood] = useState<Mood | null>(todayEntry?.mood ?? null);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
 
   useEffect(() => {
@@ -34,17 +35,22 @@ export default function TodayPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleSave() {
+  async function handleSave() {
     if (!body || !mood) return;
-    saveEntry({
-      id: todayEntry?.id,
-      date: today,
-      title: title.trim() || undefined,
-      body,
-      mood,
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaving(true);
+    try {
+      await saveEntry({
+        id: todayEntry?.id,
+        date: today,
+        title: title.trim() || undefined,
+        body,
+        mood,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
   }
 
   const canSave = body.replace(/<[^>]+>/g, "").trim().length > 0 && mood !== null;
@@ -72,8 +78,8 @@ export default function TodayPage() {
       </div>
 
       <div className="flex items-center gap-4">
-        <Button onClick={handleSave} disabled={!canSave}>
-          Zapisz
+        <Button onClick={handleSave} disabled={!canSave || saving}>
+          {saving ? "Zapisuję..." : "Zapisz"}
         </Button>
         {saved && (
           <span className="text-sm text-muted-foreground">Zapisano!</span>
