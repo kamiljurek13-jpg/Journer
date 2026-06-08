@@ -1,6 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 interface EditorToolbarProps {
   editor: Editor;
@@ -45,6 +46,12 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
       >
         1—
       </button>
+      <span className="w-px bg-border mx-1 self-stretch" aria-hidden />
+      <VoiceRecorder
+        onTranscription={(text) =>
+          editor.chain().focus().insertContent(`<p>${text}</p>`).run()
+        }
+      />
     </div>
   );
 }
