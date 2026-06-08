@@ -31,7 +31,10 @@ export function ChatPanel({ entry }: ChatPanelProps) {
   const [streamingText, setStreamingText] = useState("");
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const hasInteractedRef = useRef(false);
 
   useEffect(() => {
     if (!entry?.id) {
@@ -53,7 +56,9 @@ export function ChatPanel({ entry }: ChatPanelProps) {
   }, [entry?.id]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (hasInteractedRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, streamingText]);
 
   async function handleSend() {
@@ -74,6 +79,7 @@ export function ChatPanel({ entry }: ChatPanelProps) {
       return;
     }
 
+    hasInteractedRef.current = true;
     const userMessage = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
@@ -148,17 +154,49 @@ export function ChatPanel({ entry }: ChatPanelProps) {
     }
   }
 
+  async function handleClearHistory() {
+    if (!entry?.id) return;
+    setClearing(true);
+    await supabase.from("chat_messages").delete().eq("entry_id", entry.id);
+    setMessages([]);
+    setStreamingText("");
+    hasInteractedRef.current = false;
+    setConfirmClear(false);
+    setClearing(false);
+  }
+
   const disabled = !entry || streaming || !input.trim();
 
   return (
     <div className="flex flex-col gap-4">
       <Separator />
 
-      <div>
-        <p className="text-sm font-medium">Porozmawiaj z Ryanem Holiday</p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Agent ma dostęp do tego wpisu i może sprawdzić inne daty
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-medium">Porozmawiaj z Ryanem Holiday</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Agent ma dostęp do tego wpisu i może sprawdzić inne daty
+          </p>
+        </div>
+        {messages.length > 0 && (
+          <div className="flex items-center gap-2 ml-4">
+            {confirmClear ? (
+              <>
+                <span className="text-xs text-muted-foreground">Na pewno?</span>
+                <Button variant="destructive" size="sm" onClick={handleClearHistory} disabled={clearing}>
+                  Tak
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setConfirmClear(false)} disabled={clearing}>
+                  Nie
+                </Button>
+              </>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={() => setConfirmClear(true)}>
+                Wyczyść historię
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {!entry ? (

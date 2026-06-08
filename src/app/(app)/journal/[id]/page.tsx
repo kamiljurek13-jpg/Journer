@@ -80,14 +80,14 @@ export default function EntryPage() {
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft size={16} />
-        Journer
+        Back to days
       </Link>
 
       {!entry ? (
         <p className="text-muted-foreground">Nie znaleziono wpisu.</p>
       ) : (
         <>
-          <p className="text-3xl font-light font-serif">{formatDisplayDate(entry.date)}</p>
+          <p className="text-3xl font-light font-serif text-center">{formatDisplayDate(entry.date)}</p>
 
           <Input
             placeholder="Tytuł (opcjonalnie)"

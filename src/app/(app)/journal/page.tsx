@@ -69,7 +69,7 @@ export default function JournalPage() {
   if (loading) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-3xl font-light font-serif">Journer</h1>
+        <h1 className="text-3xl font-light font-serif text-center">Journer</h1>
         <p className="text-sm text-muted-foreground">Ładowanie...</p>
       </div>
     );
@@ -77,7 +77,7 @@ export default function JournalPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-3xl font-light font-serif">Journer</h1>
+      <h1 className="text-3xl font-light font-serif text-center">Journer</h1>
 
       <WeekStrip
         selectedDate={selectedDate}
