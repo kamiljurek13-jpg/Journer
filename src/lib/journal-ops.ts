@@ -281,7 +281,6 @@ export async function askAgent(
     .from("chat_messages")
     .select("role, content")
     .eq("user_id", userId)
-    .eq("entry_id", entry.id)
     .order("created_at", { ascending: true });
 
   const history: Anthropic.MessageParam[] = (historyRows ?? []).map((row) => ({
@@ -336,8 +335,8 @@ export async function askAgent(
   });
 
   await admin.from("chat_messages").insert([
-    { user_id: userId, entry_id: entry.id, role: "user", content: message },
-    { user_id: userId, entry_id: entry.id, role: "assistant", content: answer },
+    { user_id: userId, role: "user", content: message },
+    { user_id: userId, role: "assistant", content: answer },
   ]);
 
   return { data: { answer } };

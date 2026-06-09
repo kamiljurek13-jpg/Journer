@@ -13,7 +13,6 @@ const anthropic = new Anthropic({
 });
 
 interface ChatRequestBody {
-  entryId: string;
   entryBody: string;
   entryDate: string;
   entryTitle?: string;
@@ -25,7 +24,6 @@ interface ChatRequestBody {
 export async function POST(request: Request) {
   const body: ChatRequestBody = await request.json();
   const {
-    entryId,
     entryBody,
     entryDate,
     entryTitle,
@@ -34,7 +32,7 @@ export async function POST(request: Request) {
     accessToken,
   } = body;
 
-  if (!entryId || !message || !accessToken) {
+  if (!message || !accessToken) {
     return new Response(JSON.stringify({ error: "Missing required fields" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -61,7 +59,6 @@ export async function POST(request: Request) {
   const { data: historyRows } = await userSupabase
     .from("chat_messages")
     .select("role, content")
-    .eq("entry_id", entryId)
     .order("created_at", { ascending: true });
 
   const history: Anthropic.MessageParam[] = (historyRows ?? []).map((row) => ({
@@ -92,18 +89,8 @@ export async function POST(request: Request) {
     if (!finalText) return;
     try {
       await userSupabase.from("chat_messages").insert([
-        {
-          user_id: user.id,
-          entry_id: entryId,
-          role: "user",
-          content: message,
-        },
-        {
-          user_id: user.id,
-          entry_id: entryId,
-          role: "assistant",
-          content: finalText,
-        },
+        { user_id: user.id, role: "user", content: message },
+        { user_id: user.id, role: "assistant", content: finalText },
       ]);
     } catch (err) {
       console.error("Failed to save chat messages:", err);
