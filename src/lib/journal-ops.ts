@@ -226,6 +226,28 @@ export async function getEntry(
   return { data: { entry: data ? rowToEntry(data) : null } };
 }
 
+export function buildSearchContext(
+  results: SearchResultEntry[],
+  excludeDate?: string
+): string {
+  const top = results.filter((r) => r.date !== excludeDate).slice(0, 5);
+  if (top.length === 0) return "";
+  return top
+    .map((r) => {
+      const body = (r.body ?? "")
+        .replace(/<[^>]+>/g, "")
+        .trim()
+        .slice(0, 400);
+      const mood = MOOD_LABELS[r.mood] ?? String(r.mood);
+      return [
+        `### ${r.date}${r.title ? ` — ${r.title}` : ""}`,
+        `Mood: ${mood} (${r.mood}/5)`,
+        body || "(No content)",
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
 export async function askAgent(
   userId: string,
   input: { message: unknown; date?: unknown }
@@ -268,11 +290,19 @@ export async function askAgent(
   }));
 
   const plainText = ((entry.body as string) ?? "").replace(/<[^>]+>/g, "").trim();
+
+  const searchResult = await hybridSearch(userId, message).catch(() => null);
+  const searchContext =
+    searchResult && "data" in searchResult
+      ? buildSearchContext(searchResult.data.results, entry.date as string)
+      : undefined;
+
   const systemPrompt = buildSystemPrompt({
     date: entry.date as string,
     title: (entry.title as string | null) ?? undefined,
     plainText,
     mood: entry.mood as number,
+    searchContext: searchContext || undefined,
   });
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });

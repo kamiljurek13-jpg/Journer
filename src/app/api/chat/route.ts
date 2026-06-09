@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 import { buildSystemPrompt } from "@/lib/chatSystemPrompt";
 import { GET_ENTRY_TOOL, MOOD_LABELS } from "@/lib/chat-agent";
+import { hybridSearch, buildSearchContext } from "@/lib/journal-ops";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -70,11 +71,18 @@ export async function POST(request: Request) {
 
   const plainText = (entryBody ?? "").replace(/<[^>]+>/g, "").trim();
 
+  const searchResult = await hybridSearch(user.id, message).catch(() => null);
+  const searchContext =
+    searchResult && "data" in searchResult
+      ? buildSearchContext(searchResult.data.results, entryDate)
+      : undefined;
+
   const systemPrompt = buildSystemPrompt({
     date: entryDate,
     title: entryTitle,
     plainText,
     mood: entryMood,
+    searchContext: searchContext || undefined,
   });
 
   const encoder = new TextEncoder();
