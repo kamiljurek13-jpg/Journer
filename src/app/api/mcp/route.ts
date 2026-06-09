@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
 import { validatePAT } from "@/lib/api-auth";
-import { createOrUpdateEntry, getEntry, askAgent } from "@/lib/journal-ops";
+import { createOrUpdateEntry, getEntry, askAgent, hybridSearch } from "@/lib/journal-ops";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -100,6 +100,32 @@ function buildServer(userId: string): McpServer {
       }
       return {
         content: [{ type: "text", text: result.data.answer }],
+      };
+    }
+  );
+
+  server.registerTool(
+    "search_entries",
+    {
+      title: "Search Journal Entries",
+      description:
+        "Hybrid search across all journal entries combining semantic (vector) search, " +
+        "keyword (full-text) search, and always including the last 7 days for temporal context. " +
+        "Returns deduplicated results with source metadata.",
+      inputSchema: {
+        query: z.string().describe("Search query in any language."),
+      },
+    },
+    async ({ query }) => {
+      const result = await hybridSearch(userId, query);
+      if ("error" in result) {
+        return {
+          content: [{ type: "text", text: `Error ${result.status}: ${result.error}` }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data.results, null, 2) }],
       };
     }
   );
