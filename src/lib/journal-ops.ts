@@ -1,9 +1,11 @@
 import { randomUUID } from "crypto";
+import { after } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { buildSystemPrompt } from "@/lib/chatSystemPrompt";
 import { runAgentLoop, MOOD_LABELS } from "@/lib/chat-agent";
 import { todayString } from "@/lib/dates";
+import { generateEmbedding, buildEmbeddingText } from "@/lib/embeddings";
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -80,6 +82,12 @@ export async function createOrUpdateEntry(
       .single();
 
     if (error) return { error: "Failed to update entry", status: 500 };
+    after(async () => {
+      const text = buildEmbeddingText({ date: data.date, title: data.title ?? null, body: data.body });
+      const embedding = await generateEmbedding(text);
+      if (!embedding) return;
+      await admin.from("entries").update({ embedding: JSON.stringify(embedding) }).eq("id", data.id);
+    });
     return { data: { entry: rowToEntry(data), created: false } };
   }
 
@@ -104,6 +112,12 @@ export async function createOrUpdateEntry(
     .single();
 
   if (error) return { error: "Failed to create entry", status: 500 };
+  after(async () => {
+    const text = buildEmbeddingText({ date: data.date, title: data.title ?? null, body: data.body });
+    const embedding = await generateEmbedding(text);
+    if (!embedding) return;
+    await admin.from("entries").update({ embedding: JSON.stringify(embedding) }).eq("id", data.id);
+  });
   return { data: { entry: rowToEntry(data), created: true } };
 }
 
