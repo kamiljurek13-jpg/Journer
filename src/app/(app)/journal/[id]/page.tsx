@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MoodSelector } from "@/components/mood/MoodSelector";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { PhotoStrip } from "@/components/photos/PhotoStrip";
 import { useEntries } from "@/hooks/useEntries";
+import { useEntryPhotos } from "@/hooks/useEntryPhotos";
 import { formatDisplayDate } from "@/lib/dates";
 import type { Mood } from "@/types/entry";
 
@@ -30,6 +32,9 @@ export default function EntryPage() {
   const [saved, setSaved] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
 
+  const { photos, uploading, addPhoto, removePhoto } = useEntryPhotos(entry?.date ?? "");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (entry) {
       setTitle(entry.title ?? "");
@@ -45,15 +50,29 @@ export default function EntryPage() {
     body !== (entry?.body ?? "") ||
     mood !== (entry?.mood ?? null);
 
+  const bodyHasText = body.replace(/<[^>]+>/g, "").trim().length > 0;
+  const canSave = (bodyHasText || photos.length > 0) && mood !== null;
+
+  function handleAddPhotoClick() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await addPhoto(file);
+    e.target.value = "";
+  }
+
   async function handleSave() {
-    if (!entry || !body || !mood) return;
+    if (!entry || !canSave || !mood) return;
     setSaving(true);
     try {
       await saveEntry({
         id: entry.id,
         date: entry.date,
         title: title.trim() || undefined,
-        body,
+        body: body || "<p></p>",
         mood,
       });
       setSaved(true);
@@ -71,8 +90,6 @@ export default function EntryPage() {
     setEditorKey((k) => k + 1);
   }
 
-  const canSave = body.replace(/<[^>]+>/g, "").trim().length > 0 && mood !== null;
-
   return (
     <div className="flex flex-col gap-6">
       <Link
@@ -89,13 +106,29 @@ export default function EntryPage() {
         <>
           <p className="text-3xl font-light font-serif text-center">{formatDisplayDate(entry.date)}</p>
 
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
+          <PhotoStrip photos={photos} onDelete={removePhoto} />
+
           <Input
             placeholder="Tytuł (opcjonalnie)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
 
-          <TiptapEditor key={editorKey} content={body} onChange={setBody} />
+          <TiptapEditor
+            key={editorKey}
+            content={body}
+            onChange={setBody}
+            onAddPhoto={handleAddPhotoClick}
+            uploadingPhoto={uploading}
+          />
 
           <div className="flex flex-col gap-2">
             <p className="text-sm text-muted-foreground">Jak minął dzień?</p>

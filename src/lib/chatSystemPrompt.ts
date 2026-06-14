@@ -3,6 +3,7 @@ interface EntryContext {
   title?: string;
   plainText: string;
   mood: number;
+  searchContext?: string;
 }
 
 const MOOD_LABEL: Record<number, string> = {
@@ -30,8 +31,8 @@ ${entry.title ? `Title: ${entry.title}` : ""}
 Mood: ${moodLabel} (${entry.mood}/5)
 Content:
 ${entry.plainText || "(No content)"}
-
-You have access to a tool get_entry(date) to look up other entries the user has written. Use it when the user mentions a specific past date or period, or when it would give you useful context.
+${entry.searchContext ? `\n## Related journal entries (relevant to this conversation)\n${entry.searchContext}\n` : ""}
+You have access to a tool get_entry(date) to look up a specific entry by date. Use it only when the user asks about a particular date not already shown above.
 
 ---
 

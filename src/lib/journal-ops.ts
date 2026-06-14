@@ -1,9 +1,11 @@
 import { randomUUID } from "crypto";
+import { after } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { buildSystemPrompt } from "@/lib/chatSystemPrompt";
 import { runAgentLoop, MOOD_LABELS } from "@/lib/chat-agent";
 import { todayString } from "@/lib/dates";
+import { generateEmbedding, buildEmbeddingText } from "@/lib/embeddings";
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -20,6 +22,16 @@ type Entry = {
 type OpSuccess<T> = { data: T };
 type OpError = { error: string; status: number };
 type OpResult<T> = OpSuccess<T> | OpError;
+
+export type SearchSource = "vector" | "text" | "recent";
+export type SearchResultEntry = {
+  id: string;
+  date: string;
+  title: string | null;
+  body: string;
+  mood: number;
+  sources: SearchSource[];
+};
 
 function rowToEntry(row: {
   id: string;
@@ -39,6 +51,81 @@ function rowToEntry(row: {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function recentCutoffDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 6);
+  return d.toISOString().split("T")[0];
+}
+
+export async function hybridSearch(
+  userId: string,
+  query: string
+): Promise<OpResult<{ results: SearchResultEntry[] }>> {
+  if (!query || query.trim().length === 0) {
+    return { error: "query is required", status: 400 };
+  }
+
+  const admin = createAdminClient();
+  const trimmedQuery = query.trim();
+
+  const embeddingVector = await generateEmbedding(trimmedQuery);
+
+  const [vectorRows, textRows, recentRows] = await Promise.all([
+    embeddingVector
+      ? admin
+          .rpc("match_entries_by_vector", {
+            query_embedding: JSON.stringify(embeddingVector),
+            user_id_param: userId,
+            match_count: 30,
+          })
+          .then((r) => (r.data ?? []) as Array<{ id: string; date: string; title: string | null; body: string; mood: number }>)
+      : Promise.resolve([] as Array<{ id: string; date: string; title: string | null; body: string; mood: number }>),
+
+    admin
+      .rpc("match_entries_by_text", {
+        query_text: trimmedQuery,
+        user_id_param: userId,
+        match_count: 30,
+      })
+      .then((r) => (r.data ?? []) as Array<{ id: string; date: string; title: string | null; body: string; mood: number }>),
+
+    admin
+      .from("entries")
+      .select("id, date, title, body, mood")
+      .eq("user_id", userId)
+      .gte("date", recentCutoffDate())
+      .order("date", { ascending: false })
+      .then((r) => (r.data ?? []) as Array<{ id: string; date: string; title: string | null; body: string; mood: number }>),
+  ]);
+
+  const resultMap = new Map<string, SearchResultEntry>();
+
+  const addEntries = (
+    rows: Array<{ id: string; date: string; title: string | null; body: string; mood: number }>,
+    source: SearchSource
+  ) => {
+    for (const row of rows) {
+      const existing = resultMap.get(row.id);
+      if (existing) {
+        if (!existing.sources.includes(source)) existing.sources.push(source);
+      } else {
+        resultMap.set(row.id, { id: row.id, date: row.date, title: row.title ?? null, body: row.body, mood: row.mood, sources: [source] });
+      }
+    }
+  };
+
+  addEntries(vectorRows, "vector");
+  addEntries(textRows, "text");
+  addEntries(recentRows, "recent");
+
+  const results = Array.from(resultMap.values()).sort((a, b) => {
+    if (b.sources.length !== a.sources.length) return b.sources.length - a.sources.length;
+    return b.date.localeCompare(a.date);
+  });
+
+  return { data: { results } };
 }
 
 export async function createOrUpdateEntry(
@@ -80,6 +167,12 @@ export async function createOrUpdateEntry(
       .single();
 
     if (error) return { error: "Failed to update entry", status: 500 };
+    after(async () => {
+      const text = buildEmbeddingText({ date: data.date, title: data.title ?? null, body: data.body });
+      const embedding = await generateEmbedding(text);
+      if (!embedding) return;
+      await admin.from("entries").update({ embedding: JSON.stringify(embedding) }).eq("id", data.id);
+    });
     return { data: { entry: rowToEntry(data), created: false } };
   }
 
@@ -104,6 +197,12 @@ export async function createOrUpdateEntry(
     .single();
 
   if (error) return { error: "Failed to create entry", status: 500 };
+  after(async () => {
+    const text = buildEmbeddingText({ date: data.date, title: data.title ?? null, body: data.body });
+    const embedding = await generateEmbedding(text);
+    if (!embedding) return;
+    await admin.from("entries").update({ embedding: JSON.stringify(embedding) }).eq("id", data.id);
+  });
   return { data: { entry: rowToEntry(data), created: true } };
 }
 
@@ -125,6 +224,28 @@ export async function getEntry(
 
   if (error) return { error: "Failed to fetch entry", status: 500 };
   return { data: { entry: data ? rowToEntry(data) : null } };
+}
+
+export function buildSearchContext(
+  results: SearchResultEntry[],
+  excludeDate?: string
+): string {
+  const top = results.filter((r) => r.date !== excludeDate).slice(0, 5);
+  if (top.length === 0) return "";
+  return top
+    .map((r) => {
+      const body = (r.body ?? "")
+        .replace(/<[^>]+>/g, "")
+        .trim()
+        .slice(0, 400);
+      const mood = MOOD_LABELS[r.mood] ?? String(r.mood);
+      return [
+        `### ${r.date}${r.title ? ` — ${r.title}` : ""}`,
+        `Mood: ${mood} (${r.mood}/5)`,
+        body || "(No content)",
+      ].join("\n");
+    })
+    .join("\n\n");
 }
 
 export async function askAgent(
@@ -160,7 +281,6 @@ export async function askAgent(
     .from("chat_messages")
     .select("role, content")
     .eq("user_id", userId)
-    .eq("entry_id", entry.id)
     .order("created_at", { ascending: true });
 
   const history: Anthropic.MessageParam[] = (historyRows ?? []).map((row) => ({
@@ -169,11 +289,19 @@ export async function askAgent(
   }));
 
   const plainText = ((entry.body as string) ?? "").replace(/<[^>]+>/g, "").trim();
+
+  const searchResult = await hybridSearch(userId, message).catch(() => null);
+  const searchContext =
+    searchResult && "data" in searchResult
+      ? buildSearchContext(searchResult.data.results, entry.date as string)
+      : undefined;
+
   const systemPrompt = buildSystemPrompt({
     date: entry.date as string,
     title: (entry.title as string | null) ?? undefined,
     plainText,
     mood: entry.mood as number,
+    searchContext: searchContext || undefined,
   });
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
@@ -207,8 +335,8 @@ export async function askAgent(
   });
 
   await admin.from("chat_messages").insert([
-    { user_id: userId, entry_id: entry.id, role: "user", content: message },
-    { user_id: userId, entry_id: entry.id, role: "assistant", content: answer },
+    { user_id: userId, role: "user", content: message },
+    { user_id: userId, role: "assistant", content: answer },
   ]);
 
   return { data: { answer } };

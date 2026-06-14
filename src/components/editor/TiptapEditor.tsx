@@ -8,12 +8,16 @@ interface TiptapEditorProps {
   content: string;
   onChange?: (html: string) => void;
   editable?: boolean;
+  onAddPhoto?: () => void;
+  uploadingPhoto?: boolean;
 }
 
 export function TiptapEditor({
   content,
   onChange,
   editable = true,
+  onAddPhoto,
+  uploadingPhoto,
 }: TiptapEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -35,7 +39,13 @@ export function TiptapEditor({
 
   return (
     <div className={`border rounded-md ${editable ? "p-3" : ""}`}>
-      {editable && <EditorToolbar editor={editor} />}
+      {editable && (
+        <EditorToolbar
+          editor={editor}
+          onAddPhoto={onAddPhoto}
+          uploadingPhoto={uploadingPhoto}
+        />
+      )}
       <EditorContent editor={editor} />
     </div>
   );

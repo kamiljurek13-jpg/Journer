@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 import { buildSystemPrompt } from "@/lib/chatSystemPrompt";
 import { GET_ENTRY_TOOL, MOOD_LABELS } from "@/lib/chat-agent";
+import { hybridSearch, buildSearchContext } from "@/lib/journal-ops";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,7 +13,6 @@ const anthropic = new Anthropic({
 });
 
 interface ChatRequestBody {
-  entryId: string;
   entryBody: string;
   entryDate: string;
   entryTitle?: string;
@@ -24,7 +24,6 @@ interface ChatRequestBody {
 export async function POST(request: Request) {
   const body: ChatRequestBody = await request.json();
   const {
-    entryId,
     entryBody,
     entryDate,
     entryTitle,
@@ -33,7 +32,7 @@ export async function POST(request: Request) {
     accessToken,
   } = body;
 
-  if (!entryId || !message || !accessToken) {
+  if (!message || !accessToken) {
     return new Response(JSON.stringify({ error: "Missing required fields" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -60,7 +59,6 @@ export async function POST(request: Request) {
   const { data: historyRows } = await userSupabase
     .from("chat_messages")
     .select("role, content")
-    .eq("entry_id", entryId)
     .order("created_at", { ascending: true });
 
   const history: Anthropic.MessageParam[] = (historyRows ?? []).map((row) => ({
@@ -70,11 +68,18 @@ export async function POST(request: Request) {
 
   const plainText = (entryBody ?? "").replace(/<[^>]+>/g, "").trim();
 
+  const searchResult = await hybridSearch(user.id, message).catch(() => null);
+  const searchContext =
+    searchResult && "data" in searchResult
+      ? buildSearchContext(searchResult.data.results, entryDate)
+      : undefined;
+
   const systemPrompt = buildSystemPrompt({
     date: entryDate,
     title: entryTitle,
     plainText,
     mood: entryMood,
+    searchContext: searchContext || undefined,
   });
 
   const encoder = new TextEncoder();
@@ -84,18 +89,8 @@ export async function POST(request: Request) {
     if (!finalText) return;
     try {
       await userSupabase.from("chat_messages").insert([
-        {
-          user_id: user.id,
-          entry_id: entryId,
-          role: "user",
-          content: message,
-        },
-        {
-          user_id: user.id,
-          entry_id: entryId,
-          role: "assistant",
-          content: finalText,
-        },
+        { user_id: user.id, role: "user", content: message },
+        { user_id: user.id, role: "assistant", content: finalText },
       ]);
     } catch (err) {
       console.error("Failed to save chat messages:", err);

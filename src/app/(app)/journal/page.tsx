@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useEntries } from "@/hooks/useEntries";
+import { useEntryPhotos } from "@/hooks/useEntryPhotos";
+import { usePhotoDateSet } from "@/hooks/usePhotoDateSet";
 import { EntryListItem } from "@/components/entries/EntryListItem";
 import { WeekStrip } from "@/components/entries/WeekStrip";
+import { PhotoStrip } from "@/components/photos/PhotoStrip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MoodSelector } from "@/components/mood/MoodSelector";
@@ -28,6 +31,10 @@ export default function JournalPage() {
   const [saved, setSaved] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
 
+  const { photos, uploading, addPhoto, removePhoto } = useEntryPhotos(selectedDate);
+  const photoDates = usePhotoDateSet();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const entriesByDate = useMemo(
     () => new Map(entries.map((e) => [e.date, e])),
     [entries]
@@ -36,6 +43,11 @@ export default function JournalPage() {
   const datesWithEntries = useMemo(
     () => new Set(entries.map((e) => e.date)),
     [entries]
+  );
+
+  const datesWithActivity = useMemo(
+    () => new Set([...datesWithEntries, ...photoDates]),
+    [datesWithEntries, photoDates]
   );
 
   const selectedEntry = entriesByDate.get(selectedDate) ?? null;
@@ -47,14 +59,28 @@ export default function JournalPage() {
     setEditorKey((k) => k + 1);
   }, [selectedDate]);
 
+  function handleAddPhotoClick() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await addPhoto(file);
+    e.target.value = "";
+  }
+
+  const bodyHasText = body.replace(/<[^>]+>/g, "").trim().length > 0;
+  const canSave = (bodyHasText || photos.length > 0) && mood !== null;
+
   async function handleSave() {
-    if (!body || !mood) return;
+    if (!canSave || !mood) return;
     setSaving(true);
     try {
       await saveEntry({
         date: selectedDate,
         title: title.trim() || undefined,
-        body,
+        body: body || "<p></p>",
         mood,
       });
       setSaved(true);
@@ -63,8 +89,6 @@ export default function JournalPage() {
       setSaving(false);
     }
   }
-
-  const canSave = body.replace(/<[^>]+>/g, "").trim().length > 0 && mood !== null;
 
   if (loading) {
     return (
@@ -82,19 +106,33 @@ export default function JournalPage() {
       <WeekStrip
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
-        datesWithEntries={datesWithEntries}
+        datesWithEntries={datesWithActivity}
       />
 
       {selectedEntry ? (
         <EntryListItem entry={selectedEntry} />
       ) : selectedDate <= today ? (
         <div className="flex flex-col gap-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <PhotoStrip photos={photos} onDelete={removePhoto} />
           <Input
             placeholder="Tytuł (opcjonalnie)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
-          <TiptapEditor key={editorKey} content={body} onChange={setBody} />
+          <TiptapEditor
+            key={editorKey}
+            content={body}
+            onChange={setBody}
+            onAddPhoto={handleAddPhotoClick}
+            uploadingPhoto={uploading}
+          />
           <div className="flex flex-col gap-2">
             <p className="text-sm text-muted-foreground">Jak minął dzień?</p>
             <MoodSelector value={mood} onChange={setMood} />

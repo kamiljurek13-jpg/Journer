@@ -37,23 +37,15 @@ export function ChatPanel({ entry }: ChatPanelProps) {
   const hasInteractedRef = useRef(false);
 
   useEffect(() => {
-    if (!entry?.id) {
-      setLoadingHistory(false);
-      return;
-    }
-
     supabase
       .from("chat_messages")
       .select("role, content")
-      .eq("entry_id", entry.id)
       .order("created_at", { ascending: true })
       .then(({ data }) => {
-        if (data) {
-          setMessages(data as ChatMessage[]);
-        }
+        if (data) setMessages(data as ChatMessage[]);
         setLoadingHistory(false);
       });
-  }, [entry?.id]);
+  }, []);
 
   useEffect(() => {
     if (hasInteractedRef.current) {
@@ -91,7 +83,6 @@ export function ChatPanel({ entry }: ChatPanelProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          entryId: entry.id,
           entryBody: entry.body,
           entryDate: entry.date,
           entryTitle: entry.title,
@@ -155,9 +146,10 @@ export function ChatPanel({ entry }: ChatPanelProps) {
   }
 
   async function handleClearHistory() {
-    if (!entry?.id) return;
     setClearing(true);
-    await supabase.from("chat_messages").delete().eq("entry_id", entry.id);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setClearing(false); return; }
+    await supabase.from("chat_messages").delete().eq("user_id", user.id);
     setMessages([]);
     setStreamingText("");
     hasInteractedRef.current = false;
