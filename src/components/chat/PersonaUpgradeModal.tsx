@@ -1,20 +1,55 @@
 "use client";
 
+import { useState } from "react";
 import { Lock, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PERSONAS, type PersonaId } from "@/lib/personas";
 
 interface PersonaUpgradeModalProps {
   personaId: PersonaId;
+  accessToken: string;
+  trialRemaining: number;
+  returnPath: string;
   onClose: () => void;
+  onTrialStart: () => void;
 }
 
 export function PersonaUpgradeModal({
   personaId,
+  accessToken,
+  trialRemaining,
+  returnPath,
   onClose,
+  onTrialStart,
 }: PersonaUpgradeModalProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const persona = PERSONAS.find((p) => p.id === personaId);
   if (!persona) return null;
+
+  async function handleBuy() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persona: personaId, accessToken, returnPath }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.error ?? "Coś poszło nie tak. Spróbuj ponownie.");
+        return;
+      }
+      const { checkoutUrl } = await res.json();
+      window.location.href = checkoutUrl;
+    } catch {
+      setError("Błąd połączenia. Spróbuj ponownie.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div
@@ -43,11 +78,45 @@ export function PersonaUpgradeModal({
           </div>
         </div>
 
-        <p className="mb-6 text-sm text-muted-foreground">{persona.description}</p>
+        <p className="mb-4 text-sm text-muted-foreground">{persona.description}</p>
 
-        <Button className="w-full" disabled>
-          Kup dostęp — wkrótce dostępne
-        </Button>
+        {trialRemaining > 0 ? (
+          <>
+            <p className="mb-4 text-xs text-muted-foreground">
+              Zostało Ci{" "}
+              <span className="font-medium text-foreground">
+                {trialRemaining} darmowych wiadomości
+              </span>{" "}
+              z tą personą.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => {
+                  onClose();
+                  onTrialStart();
+                }}
+              >
+                Spróbuj za darmo ({trialRemaining} wiad.)
+              </Button>
+              <Button className="w-full" onClick={handleBuy} disabled={loading}>
+                {loading ? "Przekierowuję..." : "Kup dostęp — 10 PLN"}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mb-4 text-xs text-amber-600 dark:text-amber-400">
+              Darmowy trial wyczerpany.
+            </p>
+            <Button className="w-full" onClick={handleBuy} disabled={loading}>
+              {loading ? "Przekierowuję..." : "Kup dostęp — 10 PLN"}
+            </Button>
+          </>
+        )}
+
+        {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
       </div>
     </div>
   );

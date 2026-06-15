@@ -33,9 +33,11 @@ async function getUserId(): Promise<string> {
 }
 
 export async function fetchAllEntries(): Promise<Entry[]> {
+  const userId = await getUserId();
   const { data, error } = await supabase
     .from("entries")
     .select("*")
+    .eq("user_id", userId)
     .order("date", { ascending: false });
   if (error) throw error;
   return (data as DbRow[]).map(rowToEntry);
@@ -65,6 +67,7 @@ export async function updateEntry(
   id: string,
   patch: Partial<Entry>
 ): Promise<Entry> {
+  const userId = await getUserId();
   const { data, error } = await supabase
     .from("entries")
     .update({
@@ -74,6 +77,7 @@ export async function updateEntry(
       updated_at: patch.updatedAt,
     })
     .eq("id", id)
+    .eq("user_id", userId)
     .select()
     .single();
   if (error) throw error;

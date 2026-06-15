@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { PERSONAS, type PersonaId } from "@/lib/personas";
 import { PersonaSelector } from "@/components/chat/PersonaSelector";
 import { PersonaUpgradeModal } from "@/components/chat/PersonaUpgradeModal";
+import type { AccessInfo, PremiumPersona } from "@/lib/billing";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -38,6 +39,9 @@ export function ChatPanel({ entry }: ChatPanelProps) {
   const [chatError, setChatError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [accessInfo, setAccessInfo] = useState<Record<PremiumPersona, AccessInfo> | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasInteractedRef = useRef(false);
 
@@ -61,6 +65,34 @@ export function ChatPanel({ entry }: ChatPanelProps) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, streamingText]);
+
+  useEffect(() => {
+    // Check for post-Stripe redirect success/cancel
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("purchase");
+    const purchasedPersona = params.get("persona");
+    if (status === "success" && purchasedPersona) {
+      setPurchaseSuccess(purchasedPersona);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  async function refreshAccessInfo(token: string) {
+    try {
+      const res = await fetch("/api/billing/access", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setAccessInfo(await res.json());
+    } catch {}
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      setAccessToken(session.access_token);
+      refreshAccessInfo(session.access_token);
+    });
+  }, []);
 
   async function handleSend() {
     if (!input.trim() || !entry || streaming) return;
@@ -104,12 +136,18 @@ export function ChatPanel({ entry }: ChatPanelProps) {
       });
 
       if (!res.ok || !res.body) {
-        setChatError(
-          res.status === 401
-            ? "Sesja wygasła — zaloguj się ponownie."
-            : `Błąd połączenia z ${personaName}. Spróbuj ponownie.`
-        );
+        if (res.status === 401) {
+          setChatError("Sesja wygasła — zaloguj się ponownie.");
+        } else if (res.status === 402) {
+          if (accessToken) await refreshAccessInfo(accessToken);
+          setUpgradeModal(persona);
+        } else {
+          setChatError(`Błąd połączenia z ${personaName}. Spróbuj ponownie.`);
+        }
         setStreaming(false);
+        // Remove the optimistic user message on error
+        setMessages((prev) => prev.slice(0, -1));
+        setInput(userMessage);
         return;
       }
 
@@ -179,8 +217,21 @@ export function ChatPanel({ entry }: ChatPanelProps) {
     <div className="flex flex-col gap-4">
       <Separator />
 
+      {purchaseSuccess && (
+        <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950 px-3 py-2 text-xs text-green-700 dark:text-green-300">
+          Zakup udany! Persona odblokowana.
+          <button
+            onClick={() => setPurchaseSuccess(null)}
+            className="ml-2 underline"
+          >
+            Zamknij
+          </button>
+        </div>
+      )}
+
       <PersonaSelector
         active={persona}
+        accessInfo={accessInfo}
         onSelect={(id) => {
           setPersona(id);
           setConfirmClear(false);
@@ -299,10 +350,17 @@ export function ChatPanel({ entry }: ChatPanelProps) {
         </>
       )}
 
-      {upgradeModal && (
+      {upgradeModal && accessToken && (
         <PersonaUpgradeModal
           personaId={upgradeModal}
+          accessToken={accessToken}
+          trialRemaining={accessInfo?.[upgradeModal as PremiumPersona]?.trialRemaining ?? 0}
+          returnPath={window.location.pathname}
           onClose={() => setUpgradeModal(null)}
+          onTrialStart={() => {
+            setPersona(upgradeModal);
+            setUpgradeModal(null);
+          }}
         />
       )}
     </div>

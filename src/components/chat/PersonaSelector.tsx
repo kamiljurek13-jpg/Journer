@@ -2,27 +2,38 @@
 
 import { Lock } from "lucide-react";
 import { PERSONAS, type PersonaId } from "@/lib/personas";
+import type { AccessInfo } from "@/lib/billing";
+import type { PremiumPersona } from "@/lib/billing";
 
 interface PersonaSelectorProps {
   active: PersonaId;
+  accessInfo: Record<PremiumPersona, AccessInfo> | null;
   onSelect: (id: PersonaId) => void;
   onLockedClick: (id: PersonaId) => void;
 }
 
 export function PersonaSelector({
   active,
+  accessInfo,
   onSelect,
   onLockedClick,
 }: PersonaSelectorProps) {
+  function isUnlocked(personaId: PersonaId): boolean {
+    const persona = PERSONAS.find((p) => p.id === personaId);
+    if (persona?.unlocked) return true;
+    return accessInfo?.[personaId as PremiumPersona]?.unlocked ?? false;
+  }
+
   return (
     <div className="flex gap-2">
       {PERSONAS.map((p) => {
         const isActive = p.id === active;
+        const unlocked = isUnlocked(p.id);
         return (
           <button
             key={p.id}
             onClick={() => {
-              if (p.unlocked) {
+              if (unlocked) {
                 onSelect(p.id);
               } else {
                 onLockedClick(p.id);
@@ -36,7 +47,7 @@ export function PersonaSelector({
           >
             <div className="flex items-center justify-between gap-1">
               <span className="text-xs font-medium leading-tight">{p.name}</span>
-              {!p.unlocked && (
+              {!unlocked && (
                 <Lock size={11} className="shrink-0 text-muted-foreground" />
               )}
             </div>

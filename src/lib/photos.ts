@@ -32,9 +32,11 @@ async function getUserId(): Promise<string> {
 
 export async function fetchPhotosForDate(date: string): Promise<EntryPhoto[]> {
   if (!date) return [];
+  const userId = await getUserId();
   const { data, error } = await supabase
     .from("entry_photos")
     .select("*")
+    .eq("user_id", userId)
     .eq("date", date)
     .order("created_at", { ascending: true });
   if (error) throw error;
@@ -66,6 +68,7 @@ export async function uploadPhoto(date: string, file: File): Promise<EntryPhoto>
 }
 
 export async function deletePhoto(photo: EntryPhoto): Promise<void> {
+  const userId = await getUserId();
   const { error: storageError } = await supabase.storage
     .from(BUCKET)
     .remove([photo.storagePath]);
@@ -74,7 +77,8 @@ export async function deletePhoto(photo: EntryPhoto): Promise<void> {
   const { error: dbError } = await supabase
     .from("entry_photos")
     .delete()
-    .eq("id", photo.id);
+    .eq("id", photo.id)
+    .eq("user_id", userId);
   if (dbError) throw dbError;
 }
 
@@ -96,9 +100,11 @@ export async function getSignedUrls(
 }
 
 export async function fetchPhotoDateSet(): Promise<Set<string>> {
+  const userId = await getUserId();
   const { data, error } = await supabase
     .from("entry_photos")
-    .select("date");
+    .select("date")
+    .eq("user_id", userId);
   if (error) throw error;
   return new Set((data as { date: string }[]).map((r) => r.date));
 }
