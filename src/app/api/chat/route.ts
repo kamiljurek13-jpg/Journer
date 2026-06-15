@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { buildSystemPrompt } from "@/lib/chatSystemPrompt";
 import { GET_ENTRY_TOOL, MOOD_LABELS } from "@/lib/chat-agent";
 import { hybridSearch, buildSearchContext } from "@/lib/journal-ops";
+import type { PersonaId } from "@/lib/personas";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +20,7 @@ interface ChatRequestBody {
   entryMood: number;
   message: string;
   accessToken: string;
+  persona?: PersonaId;
 }
 
 export async function POST(request: Request) {
@@ -30,6 +32,7 @@ export async function POST(request: Request) {
     entryMood,
     message,
     accessToken,
+    persona = "ryan",
   } = body;
 
   if (!message || !accessToken) {
@@ -74,13 +77,16 @@ export async function POST(request: Request) {
       ? buildSearchContext(searchResult.data.results, entryDate)
       : undefined;
 
-  const systemPrompt = buildSystemPrompt({
-    date: entryDate,
-    title: entryTitle,
-    plainText,
-    mood: entryMood,
-    searchContext: searchContext || undefined,
-  });
+  const systemPrompt = buildSystemPrompt(
+    {
+      date: entryDate,
+      title: entryTitle,
+      plainText,
+      mood: entryMood,
+      searchContext: searchContext || undefined,
+    },
+    persona
+  );
 
   const encoder = new TextEncoder();
   let finalText = "";
@@ -89,8 +95,8 @@ export async function POST(request: Request) {
     if (!finalText) return;
     try {
       await userSupabase.from("chat_messages").insert([
-        { user_id: user.id, role: "user", content: message },
-        { user_id: user.id, role: "assistant", content: finalText },
+        { user_id: user.id, role: "user", content: message, persona },
+        { user_id: user.id, role: "assistant", content: finalText, persona },
       ]);
     } catch (err) {
       console.error("Failed to save chat messages:", err);
