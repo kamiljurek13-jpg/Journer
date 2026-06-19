@@ -1,5 +1,6 @@
 import { getStripe } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { completePurchase } from "@/lib/billing-db";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +35,11 @@ export async function POST(request: Request) {
 
     if (userId) {
       const admin = createAdminClient();
-      const { error } = await admin.rpc("complete_purchase", {
-        p_session_id: session.id,
-        p_user_id: userId,
-        p_payment_intent_id: paymentIntent,
-      });
-      if (error) console.error("complete_purchase error:", error);
+      try {
+        await completePurchase(admin, session.id, userId, paymentIntent);
+      } catch (err) {
+        console.error("complete_purchase error:", err);
+      }
     }
   }
 

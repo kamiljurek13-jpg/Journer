@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { createAdminClient } from "./supabase-admin";
+import { getUserBillingAccess as dbGetUserBillingAccess } from "./billing-db";
 
 let _stripe: Stripe | null = null;
 
@@ -22,23 +23,14 @@ export type AccessInfo = {
   trialRemaining: number;
 };
 
-type BillingAccessRow = {
-  persona: string;
-  is_purchased: boolean;
-  message_count: number;
-};
-
 export async function getUserAccess(
   userId: string
 ): Promise<Record<PremiumPersona, AccessInfo>> {
   const admin = createAdminClient();
-  const { data, error } = await admin.rpc("get_user_billing_access", {
-    p_user_id: userId,
-  });
-  if (error) throw error;
+  const rows = await dbGetUserBillingAccess(admin, userId);
 
   const result = {} as Record<PremiumPersona, AccessInfo>;
-  for (const row of (data ?? []) as BillingAccessRow[]) {
+  for (const row of rows) {
     const persona = row.persona as PremiumPersona;
     result[persona] = {
       unlocked: row.is_purchased,

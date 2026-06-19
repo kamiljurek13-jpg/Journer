@@ -1,6 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { getStripe, PREMIUM_PERSONAS, type PremiumPersona } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase-admin";
+import {
+  checkExistingPurchase,
+  getStripeCustomerId,
+  upsertStripeCustomer,
+  upsertPendingPurchase,
+} from "@/lib/billing-db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,11 +55,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
 
   // Check if already purchased
-  const { data: alreadyPurchased, error: purchaseCheckError } = await admin.rpc(
-    "check_existing_purchase",
-    { p_user_id: user.id, p_persona: persona }
-  );
-  if (purchaseCheckError) throw purchaseCheckError;
+  const alreadyPurchased = await checkExistingPurchase(admin, user.id, persona);
   if (alreadyPurchased) {
     return Response.json({ error: "Already purchased" }, { status: 409 });
   }
@@ -61,28 +63,19 @@ export async function POST(request: Request) {
   const stripe = getStripe();
 
   // Get or create Stripe customer
-  const { data: existingCustomerId, error: customerReadError } = await admin.rpc(
-    "get_stripe_customer_id",
-    { p_user_id: user.id }
-  );
-  if (customerReadError) throw customerReadError;
+  const existingCustomerId = await getStripeCustomerId(admin, user.id);
 
   let stripeCustomerId: string;
 
   if (existingCustomerId) {
-    stripeCustomerId = existingCustomerId as string;
+    stripeCustomerId = existingCustomerId;
   } else {
     const customer = await stripe.customers.create({
       email: user.email,
       metadata: { supabase_user_id: user.id },
     });
     stripeCustomerId = customer.id;
-
-    const { error: upsertError } = await admin.rpc("upsert_stripe_customer", {
-      p_user_id: user.id,
-      p_stripe_customer_id: stripeCustomerId,
-    });
-    if (upsertError) throw upsertError;
+    await upsertStripeCustomer(admin, user.id, stripeCustomerId);
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -96,14 +89,14 @@ export async function POST(request: Request) {
     cancel_url: `${baseUrl}${safePath}`,
   });
 
-  const { error: pendingError } = await admin.rpc("upsert_pending_purchase", {
-    p_user_id: user.id,
-    p_persona: persona,
-    p_session_id: session.id,
-    p_amount_cents: session.amount_total ?? 1000,
-    p_currency: session.currency ?? "pln",
-  });
-  if (pendingError) throw pendingError;
+  await upsertPendingPurchase(
+    admin,
+    user.id,
+    persona,
+    session.id,
+    session.amount_total ?? 1000,
+    session.currency ?? "pln"
+  );
 
   return Response.json({ checkoutUrl: session.url });
 }

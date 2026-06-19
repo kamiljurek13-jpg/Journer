@@ -14,14 +14,47 @@ function buildServer(userId: string): McpServer {
   server.registerTool(
     "create_entry",
     {
-      title: "Create or Update Journal Entry",
+      title: "Create Journal Entry",
       description:
-        "Creates a new journal entry or updates an existing one for the given date. " +
-        "If an entry already exists for that date, only provided fields are updated. " +
-        "mood is required when creating a new entry.",
+        "Creates a new journal entry for the given date. mood is required. " +
+        "If an entry already exists for that date, only the provided fields are updated. " +
+        "Use update_entry instead when you know the entry already exists and want to patch it.",
+      inputSchema: {
+        mood: z.number().int().min(1).max(5).describe(
+          "Mood from 1 (very bad) to 5 (great). Required."
+        ),
+        title: z.string().optional().describe("Optional entry title."),
+        body: z.string().optional().describe("Entry text content."),
+        date: z.string().optional().describe(
+          "Date in YYYY-MM-DD format. Defaults to today."
+        ),
+      },
+    },
+    async (args) => {
+      const result = await createOrUpdateEntry(userId, args);
+      if ("error" in result) {
+        return {
+          content: [{ type: "text", text: `Error ${result.status}: ${result.error}` }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data.entry, null, 2) }],
+      };
+    }
+  );
+
+  server.registerTool(
+    "update_entry",
+    {
+      title: "Update Journal Entry",
+      description:
+        "Updates an existing journal entry for the given date. " +
+        "Only the fields you provide are changed — omitted fields are left as-is. " +
+        "Use create_entry (which requires mood) when the entry may not exist yet.",
       inputSchema: {
         mood: z.number().int().min(1).max(5).optional().describe(
-          "Mood from 1 (very bad) to 5 (great). Required when creating a new entry."
+          "Mood from 1 (very bad) to 5 (great)."
         ),
         title: z.string().optional().describe("Optional entry title."),
         body: z.string().optional().describe("Entry text content."),
@@ -82,7 +115,7 @@ function buildServer(userId: string): McpServer {
       description:
         "Sends a message to the Ryan Holiday (Stoic philosophy) AI agent in the context of " +
         "a journal entry. The agent uses the entry content and full conversation history for " +
-        "that day to respond. An entry must exist for the given date — call create_entry first if needed.",
+        "that day to respond. An entry must exist for the given date — call create_entry first if needed (mood is required).",
       inputSchema: {
         message: z.string().describe("Your question or message to the agent."),
         date: z.string().optional().describe(
