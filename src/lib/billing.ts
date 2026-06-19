@@ -69,3 +69,17 @@ export async function incrementTrialUsage(
   });
   if (error) throw error;
 }
+
+export async function tryConsumeTrialMessage(
+  userId: string,
+  persona: string
+): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("try_consume_trial_message", {
+    p_user_id: userId,
+    p_persona: persona,
+    p_limit: TRIAL_LIMIT,
+  });
+  if (error) throw error;
+  return data as boolean;
+}

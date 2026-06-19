@@ -4,7 +4,7 @@ import { after } from "next/server";
 import { buildSystemPrompt } from "@/lib/chatSystemPrompt";
 import { GET_ENTRY_TOOL, MOOD_LABELS } from "@/lib/chat-agent";
 import { hybridSearch, buildSearchContext } from "@/lib/journal-ops";
-import { checkPersonaAccess, incrementTrialUsage } from "@/lib/billing";
+import { PREMIUM_PERSONAS, getUserAccess, tryConsumeTrialMessage, type PremiumPersona } from "@/lib/billing";
 import type { PersonaId } from "@/lib/personas";
 
 export const dynamic = "force-dynamic";
@@ -60,16 +60,18 @@ export async function POST(request: Request) {
     });
   }
 
-  // Premium persona access check
-  const access = await checkPersonaAccess(user.id, persona);
-  if (!access.allowed) {
-    return new Response(JSON.stringify({ error: "payment_required" }), {
-      status: 402,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-  if (access.reason === "trial") {
-    await incrementTrialUsage(user.id, persona);
+  // Premium persona access check — atomic consume prevents concurrent trial bypass
+  if (PREMIUM_PERSONAS.includes(persona as PremiumPersona)) {
+    const billing = await getUserAccess(user.id);
+    if (!billing[persona as PremiumPersona].unlocked) {
+      const consumed = await tryConsumeTrialMessage(user.id, persona);
+      if (!consumed) {
+        return new Response(JSON.stringify({ error: "payment_required" }), {
+          status: 402,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
   }
 
   const { data: historyRows } = await userSupabase
