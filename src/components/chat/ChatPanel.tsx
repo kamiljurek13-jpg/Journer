@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/lib/supabase";
+import { PERSONAS, type PersonaId } from "@/lib/personas";
+import { PersonaSelector } from "@/components/chat/PersonaSelector";
+import { PersonaUpgradeModal } from "@/components/chat/PersonaUpgradeModal";
+import type { AccessInfo, PremiumPersona } from "@/lib/billing";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -25,6 +29,8 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ entry }: ChatPanelProps) {
+  const [persona, setPersona] = useState<PersonaId>("ryan");
+  const [upgradeModal, setUpgradeModal] = useState<PersonaId | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -33,19 +39,26 @@ export function ChatPanel({ entry }: ChatPanelProps) {
   const [chatError, setChatError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [accessInfo, setAccessInfo] = useState<Record<PremiumPersona, AccessInfo> | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasInteractedRef = useRef(false);
 
   useEffect(() => {
+    setLoadingHistory(true);
+    setMessages([]);
+    hasInteractedRef.current = false;
     supabase
       .from("chat_messages")
       .select("role, content")
+      .eq("persona", persona)
       .order("created_at", { ascending: true })
       .then(({ data }) => {
         if (data) setMessages(data as ChatMessage[]);
         setLoadingHistory(false);
       });
-  }, []);
+  }, [persona]);
 
   useEffect(() => {
     if (hasInteractedRef.current) {
@@ -53,12 +66,39 @@ export function ChatPanel({ entry }: ChatPanelProps) {
     }
   }, [messages, streamingText]);
 
+  useEffect(() => {
+    // Check for post-Stripe redirect success/cancel
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("purchase");
+    const purchasedPersona = params.get("persona");
+    if (status === "success" && purchasedPersona) {
+      setPurchaseSuccess(purchasedPersona);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  async function refreshAccessInfo(token: string) {
+    try {
+      const res = await fetch("/api/billing/access", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setAccessInfo(await res.json());
+    } catch {}
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      setAccessToken(session.access_token);
+      refreshAccessInfo(session.access_token);
+    });
+  }, []);
+
   async function handleSend() {
     if (!input.trim() || !entry || streaming) return;
 
     setChatError(null);
 
-    // getUser() verifies the token server-side and triggers a refresh if needed
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       setChatError("Sesja wygasła — zaloguj się ponownie.");
@@ -78,6 +118,8 @@ export function ChatPanel({ entry }: ChatPanelProps) {
     setStreaming(true);
     setStreamingText("");
 
+    const personaName = PERSONAS.find((p) => p.id === persona)?.name ?? "agenta";
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -89,16 +131,23 @@ export function ChatPanel({ entry }: ChatPanelProps) {
           entryMood: entry.mood,
           message: userMessage,
           accessToken: session.access_token,
+          persona,
         }),
       });
 
       if (!res.ok || !res.body) {
-        setChatError(
-          res.status === 401
-            ? "Sesja wygasła — zaloguj się ponownie."
-            : "Błąd połączenia z Ryanem. Spróbuj ponownie."
-        );
+        if (res.status === 401) {
+          setChatError("Sesja wygasła — zaloguj się ponownie.");
+        } else if (res.status === 402) {
+          if (accessToken) await refreshAccessInfo(accessToken);
+          setUpgradeModal(persona);
+        } else {
+          setChatError(`Błąd połączenia z ${personaName}. Spróbuj ponownie.`);
+        }
         setStreaming(false);
+        // Remove the optimistic user message on error
+        setMessages((prev) => prev.slice(0, -1));
+        setInput(userMessage);
         return;
       }
 
@@ -132,7 +181,7 @@ export function ChatPanel({ entry }: ChatPanelProps) {
       setStreamingText("");
     } catch (err) {
       console.error("Chat error:", err);
-      setChatError("Błąd połączenia z Ryanem. Spróbuj ponownie.");
+      setChatError(`Błąd połączenia z ${personaName}. Spróbuj ponownie.`);
     } finally {
       setStreaming(false);
     }
@@ -149,7 +198,11 @@ export function ChatPanel({ entry }: ChatPanelProps) {
     setClearing(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setClearing(false); return; }
-    await supabase.from("chat_messages").delete().eq("user_id", user.id);
+    await supabase
+      .from("chat_messages")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("persona", persona);
     setMessages([]);
     setStreamingText("");
     hasInteractedRef.current = false;
@@ -158,14 +211,38 @@ export function ChatPanel({ entry }: ChatPanelProps) {
   }
 
   const disabled = !entry || streaming || !input.trim();
+  const activePersonaName = PERSONAS.find((p) => p.id === persona)?.name ?? "agenta";
 
   return (
     <div className="flex flex-col gap-4">
       <Separator />
 
+      {purchaseSuccess && (
+        <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950 px-3 py-2 text-xs text-green-700 dark:text-green-300">
+          Zakup udany! Persona odblokowana.
+          <button
+            onClick={() => setPurchaseSuccess(null)}
+            className="ml-2 underline"
+          >
+            Zamknij
+          </button>
+        </div>
+      )}
+
+      <PersonaSelector
+        active={persona}
+        accessInfo={accessInfo}
+        onSelect={(id) => {
+          setPersona(id);
+          setConfirmClear(false);
+          setChatError(null);
+        }}
+        onLockedClick={(id) => setUpgradeModal(id)}
+      />
+
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium">Porozmawiaj z Ryanem Holiday</p>
+          <p className="text-sm font-medium">Porozmawiaj z {activePersonaName}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             Agent ma dostęp do tego wpisu i może sprawdzić inne daty
           </p>
@@ -271,6 +348,20 @@ export function ChatPanel({ entry }: ChatPanelProps) {
             </Button>
           </div>
         </>
+      )}
+
+      {upgradeModal && accessToken && (
+        <PersonaUpgradeModal
+          personaId={upgradeModal}
+          accessToken={accessToken}
+          trialRemaining={accessInfo?.[upgradeModal as PremiumPersona]?.trialRemaining ?? 0}
+          returnPath={window.location.pathname}
+          onClose={() => setUpgradeModal(null)}
+          onTrialStart={() => {
+            setPersona(upgradeModal);
+            setUpgradeModal(null);
+          }}
+        />
       )}
     </div>
   );

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ApiToken {
   id: string;
@@ -27,6 +29,8 @@ async function getAccessToken(): Promise<string | null> {
 }
 
 export default function SettingsPage() {
+  const { signOut } = useAuth();
+  const router = useRouter();
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
@@ -174,6 +178,16 @@ export default function SettingsPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section>
+        <Button
+          variant="outline"
+          className="text-destructive hover:text-destructive"
+          onClick={async () => { await signOut(); router.push("/login"); }}
+        >
+          Wyloguj się
+        </Button>
       </section>
     </main>
   );
