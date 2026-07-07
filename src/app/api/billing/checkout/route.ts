@@ -3,6 +3,7 @@ import { getStripe, PREMIUM_PERSONAS, type PremiumPersona } from "@/lib/billing"
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
   checkExistingPurchase,
+  getPendingPurchase,
   getStripeCustomerId,
   upsertStripeCustomer,
   upsertPendingPurchase,
@@ -61,6 +62,20 @@ export async function POST(request: Request) {
   }
 
   const stripe = getStripe();
+
+  // Reuse an in-flight checkout session instead of creating a duplicate:
+  // upsertPendingPurchase below upserts on (user_id, persona), so a still-open
+  // pending session must be returned as-is rather than replaced, or its Stripe
+  // session URL would be silently orphaned (paid-but-unrecorded on completion).
+  const pending = await getPendingPurchase(admin, user.id, persona);
+  if (pending) {
+    const existingSession = await stripe.checkout.sessions.retrieve(
+      pending.stripe_checkout_session_id
+    );
+    if (existingSession.status === "open" && existingSession.url) {
+      return Response.json({ checkoutUrl: existingSession.url });
+    }
+  }
 
   // Get or create Stripe customer
   const existingCustomerId = await getStripeCustomerId(admin, user.id);

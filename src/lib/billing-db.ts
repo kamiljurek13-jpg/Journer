@@ -21,6 +21,23 @@ export async function checkExistingPurchase(
   return data !== null;
 }
 
+export async function getPendingPurchase(
+  admin: AdminClient,
+  userId: string,
+  persona: string
+): Promise<{ stripe_checkout_session_id: string } | null> {
+  const { data, error } = await admin
+    .schema("billing")
+    .from("purchases")
+    .select("stripe_checkout_session_id")
+    .eq("user_id", userId)
+    .eq("persona", persona)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (error) throw error;
+  return data as { stripe_checkout_session_id: string } | null;
+}
+
 export async function getStripeCustomerId(
   admin: AdminClient,
   userId: string
@@ -67,7 +84,7 @@ export async function upsertPendingPurchase(
         currency,
         status: "pending",
       },
-      { onConflict: "stripe_checkout_session_id" }
+      { onConflict: "user_id,persona" }
     );
   if (error) throw error;
 }
