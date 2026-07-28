@@ -39,6 +39,7 @@ export async function POST(request: Request) {
         await completePurchase(admin, session.id, userId, paymentIntent);
       } catch (err) {
         console.error("complete_purchase error:", err);
+        return Response.json({ error: "Failed to record purchase" }, { status: 500 });
       }
     }
   }
