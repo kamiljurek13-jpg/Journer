@@ -21,9 +21,9 @@ const TiptapEditor = dynamic(
 );
 
 export default function EntryPage() {
-  const { id } = useParams<{ id: string }>();
-  const { getEntryById, saveEntry } = useEntries();
-  const entry = getEntryById(id);
+  const { date } = useParams<{ date: string }>();
+  const { getEntryByDate, saveEntry } = useEntries();
+  const entry = getEntryByDate(date);
 
   const [title, setTitle] = useState(entry?.title ?? "");
   const [body, setBody] = useState(entry?.body ?? "");
@@ -43,7 +43,7 @@ export default function EntryPage() {
       setEditorKey((k) => k + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry?.id]);
+  }, [entry?.date]);
 
   const isDirty =
     title !== (entry?.title ?? "") ||
@@ -69,7 +69,6 @@ export default function EntryPage() {
     setSaving(true);
     try {
       await saveEntry({
-        id: entry.id,
         date: entry.date,
         title: title.trim() || undefined,
         body: body || "<p></p>",

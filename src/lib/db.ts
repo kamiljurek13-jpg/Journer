@@ -1,85 +1,66 @@
 import { supabase } from "./supabase";
 import type { Entry, Mood } from "@/types/entry";
 
-type DbRow = {
+type ApiEntry = {
   id: string;
-  user_id: string;
   date: string;
   title: string | null;
   body: string;
   mood: number;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
-function rowToEntry(row: DbRow): Entry {
+function toEntry(row: ApiEntry): Entry {
   return {
     id: row.id,
     date: row.date,
     title: row.title ?? undefined,
     body: row.body,
     mood: row.mood as Mood,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
-async function getUserId(): Promise<string> {
+async function getAccessToken(): Promise<string> {
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-  return user.id;
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not authenticated");
+  return session.access_token;
 }
 
 export async function fetchAllEntries(): Promise<Entry[]> {
-  const userId = await getUserId();
-  const { data, error } = await supabase
-    .from("entries")
-    .select("*")
-    .eq("user_id", userId)
-    .order("date", { ascending: false });
-  if (error) throw error;
-  return (data as DbRow[]).map(rowToEntry);
+  const accessToken = await getAccessToken();
+  const res = await fetch("/api/entries", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch entries");
+  const { entries } = (await res.json()) as { entries: ApiEntry[] };
+  return entries.map(toEntry);
 }
 
-export async function createEntry(entry: Entry): Promise<Entry> {
-  const userId = await getUserId();
-  const { data, error } = await supabase
-    .from("entries")
-    .insert({
-      id: entry.id,
-      user_id: userId,
-      date: entry.date,
-      title: entry.title ?? null,
-      body: entry.body,
-      mood: entry.mood,
-      created_at: entry.createdAt,
-      updated_at: entry.updatedAt,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return rowToEntry(data as DbRow);
-}
-
-export async function updateEntry(
-  id: string,
-  patch: Partial<Entry>
-): Promise<Entry> {
-  const userId = await getUserId();
-  const { data, error } = await supabase
-    .from("entries")
-    .update({
-      title: patch.title ?? null,
-      body: patch.body,
-      mood: patch.mood,
-      updated_at: patch.updatedAt,
-    })
-    .eq("id", id)
-    .eq("user_id", userId)
-    .select()
-    .single();
-  if (error) throw error;
-  return rowToEntry(data as DbRow);
+/**
+ * Creates or updates the entry for `input.date` — the server decides which,
+ * mirroring the existing PAT-authenticated /api/v1/entries POST behavior.
+ */
+export async function saveEntryApi(input: {
+  date: string;
+  title?: string;
+  body: string;
+  mood: number;
+}): Promise<Entry> {
+  const accessToken = await getAccessToken();
+  const res = await fetch("/api/entries", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error("Failed to save entry");
+  const { entry } = (await res.json()) as { entry: ApiEntry };
+  return toEntry(entry);
 }

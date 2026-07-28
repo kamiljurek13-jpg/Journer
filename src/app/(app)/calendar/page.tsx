@@ -68,7 +68,7 @@ export default function CalendarPage() {
     const dateStr = toDateStr(d);
     const entry = entryByDate.get(dateStr);
     if (entry) {
-      router.push(`/journal/${entry.id}`);
+      router.push(`/journal/${entry.date}`);
     }
   }
 

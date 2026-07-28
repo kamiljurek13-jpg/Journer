@@ -1,21 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { v4 as uuidv4 } from "uuid";
-import { fetchAllEntries, createEntry, updateEntry } from "@/lib/db";
+import { fetchAllEntries, saveEntryApi } from "@/lib/db";
 import { todayString } from "@/lib/dates";
-import type { Entry, Mood } from "@/types/entry";
+import type { Entry } from "@/types/entry";
 
-type SavePayload = Omit<Entry, "id" | "createdAt" | "updatedAt"> & {
-  id?: string;
-};
+type SavePayload = Omit<Entry, "id" | "createdAt" | "updatedAt">;
 
 interface UseEntriesReturn {
   entries: Entry[];
   loading: boolean;
   error: string | null;
   getTodayEntry: () => Entry | undefined;
-  getEntryById: (id: string) => Entry | undefined;
+  getEntryByDate: (date: string) => Entry | undefined;
   saveEntry: (data: SavePayload) => Promise<void>;
 }
 
@@ -35,36 +32,25 @@ export function useEntries(): UseEntriesReturn {
     return entries.find((e) => e.date === todayString());
   }
 
-  function getEntryById(id: string): Entry | undefined {
-    return entries.find((e) => e.id === id);
+  function getEntryByDate(date: string): Entry | undefined {
+    return entries.find((e) => e.date === date);
   }
 
   async function saveEntry(data: SavePayload): Promise<void> {
-    const now = new Date().toISOString();
-    if (data.id) {
-      const updated = await updateEntry(data.id, {
-        title: data.title,
-        body: data.body,
-        mood: data.mood,
-        updatedAt: now,
-      });
-      setEntriesState((prev) =>
-        prev.map((e) => (e.id === data.id ? updated : e))
-      );
-    } else {
-      const newEntry: Entry = {
-        id: uuidv4(),
-        date: data.date,
-        title: data.title,
-        body: data.body,
-        mood: data.mood as Mood,
-        createdAt: now,
-        updatedAt: now,
-      };
-      const saved = await createEntry(newEntry);
-      setEntriesState((prev) => [...prev, saved]);
-    }
+    const saved = await saveEntryApi({
+      date: data.date,
+      title: data.title,
+      body: data.body,
+      mood: data.mood,
+    });
+    setEntriesState((prev) => {
+      const idx = prev.findIndex((e) => e.date === data.date);
+      if (idx === -1) return [...prev, saved];
+      const next = [...prev];
+      next[idx] = saved;
+      return next;
+    });
   }
 
-  return { entries, loading, error, getTodayEntry, getEntryById, saveEntry };
+  return { entries, loading, error, getTodayEntry, getEntryByDate, saveEntry };
 }

@@ -2,8 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 import { buildSystemPrompt } from "@/lib/chatSystemPrompt";
-import { GET_ENTRY_TOOL, MOOD_LABELS } from "@/lib/chat-agent";
+import { GET_ENTRY_TOOL } from "@/lib/chat-agent";
 import { hybridSearch, buildSearchContext } from "@/lib/journal-ops";
+import { getEntryForAgent } from "@/lib/strapi-entries";
 import { PREMIUM_PERSONAS, getUserAccess, tryConsumeTrialMessage, type PremiumPersona } from "@/lib/billing";
 import type { PersonaId } from "@/lib/personas";
 
@@ -221,31 +222,7 @@ export async function POST(request: Request) {
             let result = "";
             if (tc.name === "get_entry") {
               const { date } = input as { date: string };
-              const { data: entry } = await userSupabase
-                .from("entries")
-                .select("date, title, body, mood")
-                .eq("user_id", user.id)
-                .eq("date", date)
-                .maybeSingle();
-
-              if (entry) {
-                const bodyText = (entry.body as string)
-                  .replace(/<[^>]+>/g, "")
-                  .trim();
-                const moodLabel =
-                  MOOD_LABELS[entry.mood as number] ?? String(entry.mood);
-                result = [
-                  `Entry for ${entry.date}:`,
-                  entry.title ? `Title: ${entry.title}` : null,
-                  `Mood: ${moodLabel} (${entry.mood}/5)`,
-                  "Content:",
-                  bodyText || "(No content)",
-                ]
-                  .filter(Boolean)
-                  .join("\n");
-              } else {
-                result = `No entry found for ${date}.`;
-              }
+              result = await getEntryForAgent(user.id, date);
             }
 
             toolResults.push({

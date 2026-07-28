@@ -25,7 +25,7 @@ export function EntryListItem({ entry }: EntryListItemProps) {
     : stripHtml(entry.body).slice(0, 80) + (stripHtml(entry.body).length > 80 ? "…" : "");
 
   return (
-    <Link href={`/journal/${entry.id}`}>
+    <Link href={`/journal/${entry.date}`}>
       <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
         <CardContent className="flex items-center justify-between py-4 px-5">
           <div className="flex flex-col gap-0.5 min-w-0">

@@ -6,18 +6,20 @@ import { buildSystemPrompt } from "@/lib/chatSystemPrompt";
 import { runAgentLoop, MOOD_LABELS } from "@/lib/chat-agent";
 import { todayString } from "@/lib/dates";
 import { generateEmbedding, buildEmbeddingText } from "@/lib/embeddings";
+import {
+  findEntryByUserAndDate,
+  createStrapiEntry,
+  updateStrapiEntry,
+  listRecentEntries,
+  searchEntriesFullText,
+  findEntriesByStrapiIds,
+  getEntryForAgent,
+  type StrapiEntry,
+} from "@/lib/strapi-entries";
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-type Entry = {
-  id: string;
-  date: string;
-  title: string | null;
-  body: string;
-  mood: number;
-  createdAt: string;
-  updatedAt: string;
-};
+type Entry = StrapiEntry;
 
 type OpSuccess<T> = { data: T };
 type OpError = { error: string; status: number };
@@ -32,26 +34,6 @@ export type SearchResultEntry = {
   mood: number;
   sources: SearchSource[];
 };
-
-function rowToEntry(row: {
-  id: string;
-  date: string;
-  title: string | null;
-  body: string;
-  mood: number;
-  created_at: string;
-  updated_at: string;
-}): Entry {
-  return {
-    id: row.id,
-    date: row.date,
-    title: row.title ?? null,
-    body: row.body,
-    mood: row.mood,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
 
 function recentCutoffDate(): string {
   const d = new Date();
@@ -80,30 +62,18 @@ export async function hybridSearch(
             user_id_param: userId,
             match_count: 30,
           })
-          .then((r) => (r.data ?? []) as Array<{ id: string; date: string; title: string | null; body: string; mood: number }>)
-      : Promise.resolve([] as Array<{ id: string; date: string; title: string | null; body: string; mood: number }>),
+          .then((r) => (r.data ?? []) as Array<{ strapi_entry_id: string; date: string; mood: number }>)
+      : Promise.resolve([] as Array<{ strapi_entry_id: string; date: string; mood: number }>),
 
-    admin
-      .rpc("match_entries_by_text", {
-        query_text: trimmedQuery,
-        user_id_param: userId,
-        match_count: 30,
-      })
-      .then((r) => (r.data ?? []) as Array<{ id: string; date: string; title: string | null; body: string; mood: number }>),
+    searchEntriesFullText(userId, trimmedQuery, 30).catch(() => []),
 
-    admin
-      .from("entries")
-      .select("id, date, title, body, mood")
-      .eq("user_id", userId)
-      .gte("date", recentCutoffDate())
-      .order("date", { ascending: false })
-      .then((r) => (r.data ?? []) as Array<{ id: string; date: string; title: string | null; body: string; mood: number }>),
+    listRecentEntries(userId, recentCutoffDate()).catch(() => [] as StrapiEntry[]),
   ]);
 
   const resultMap = new Map<string, SearchResultEntry>();
 
   const addEntries = (
-    rows: Array<{ id: string; date: string; title: string | null; body: string; mood: number }>,
+    rows: Array<{ id: string; date: string; title?: string | null; body?: string; mood: number }>,
     source: SearchSource
   ) => {
     for (const row of rows) {
@@ -111,14 +81,50 @@ export async function hybridSearch(
       if (existing) {
         if (!existing.sources.includes(source)) existing.sources.push(source);
       } else {
-        resultMap.set(row.id, { id: row.id, date: row.date, title: row.title ?? null, body: row.body, mood: row.mood, sources: [source] });
+        resultMap.set(row.id, {
+          id: row.id,
+          date: row.date,
+          title: row.title ?? null,
+          body: row.body ?? "",
+          mood: row.mood,
+          sources: [source],
+        });
       }
     }
   };
 
-  addEntries(vectorRows, "vector");
-  addEntries(textRows, "text");
-  addEntries(recentRows, "recent");
+  // Text and recent legs carry full title/body from Strapi — add them first.
+  // The vector leg (Supabase) only carries strapi_entry_id/date/mood, so it must
+  // go last: an entry it "confirms" that's already in the map keeps the real
+  // content already set by text/recent, and only genuinely vector-only matches
+  // are inserted without content (hydrated below).
+  addEntries(
+    textRows.map((r) => ({ id: r.strapi_entry_id, date: r.date, title: r.title, body: r.body, mood: r.mood })),
+    "text"
+  );
+  addEntries(
+    recentRows.map((r) => ({ id: r.id, date: r.date, title: r.title, body: r.body, mood: r.mood })),
+    "recent"
+  );
+  addEntries(
+    vectorRows.map((r) => ({ id: r.strapi_entry_id, date: r.date, mood: r.mood })),
+    "vector"
+  );
+
+  const needsHydration = Array.from(resultMap.values())
+    .filter((r) => r.sources.length === 1 && r.sources[0] === "vector")
+    .map((r) => r.id);
+
+  if (needsHydration.length > 0) {
+    const hydrated = await findEntriesByStrapiIds(needsHydration).catch(() => [] as StrapiEntry[]);
+    for (const entry of hydrated) {
+      const existing = resultMap.get(entry.id);
+      if (existing) {
+        existing.title = entry.title;
+        existing.body = entry.body;
+      }
+    }
+  }
 
   const results = Array.from(resultMap.values()).sort((a, b) => {
     if (b.sources.length !== a.sources.length) return b.sources.length - a.sources.length;
@@ -144,66 +150,79 @@ export async function createOrUpdateEntry(
     return { error: "mood must be an integer between 1 and 5", status: 400 };
   }
 
-  const admin = createAdminClient();
-
-  const { data: existing } = await admin
-    .from("entries")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("date", date)
-    .maybeSingle();
+  let existing: StrapiEntry | null;
+  try {
+    existing = await findEntryByUserAndDate(userId, date);
+  } catch {
+    return { error: "Failed to fetch entry", status: 500 };
+  }
 
   if (existing) {
-    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const patch: { title?: string | null; body?: string; mood?: number } = {};
     if (title !== null) patch.title = title;
     if (entryBody !== "") patch.body = entryBody;
     if (mood !== undefined) patch.mood = mood;
 
-    const { data, error } = await admin
-      .from("entries")
-      .update(patch)
-      .eq("id", existing.id)
-      .select()
-      .single();
+    let updated: StrapiEntry;
+    try {
+      updated = await updateStrapiEntry(existing.id, patch);
+    } catch {
+      return { error: "Failed to update entry", status: 500 };
+    }
 
-    if (error) return { error: "Failed to update entry", status: 500 };
     after(async () => {
-      const text = buildEmbeddingText({ date: data.date, title: data.title ?? null, body: data.body });
+      const text = buildEmbeddingText({ date: updated.date, title: updated.title, body: updated.body });
       const embedding = await generateEmbedding(text);
       if (!embedding) return;
-      await admin.from("entries").update({ embedding: JSON.stringify(embedding) }).eq("id", data.id);
+      const admin = createAdminClient();
+      await admin
+        .from("entries")
+        .update({
+          title: updated.title,
+          body: updated.body,
+          mood: updated.mood,
+          strapi_entry_id: updated.id,
+          embedding: JSON.stringify(embedding),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId)
+        .eq("date", date);
     });
-    return { data: { entry: rowToEntry(data), created: false } };
+
+    return { data: { entry: updated, created: false } };
   }
 
   if (mood === undefined) {
     return { error: "mood is required when creating a new entry", status: 400 };
   }
 
-  const now = new Date().toISOString();
-  const { data, error } = await admin
-    .from("entries")
-    .insert({
+  let created: StrapiEntry;
+  try {
+    created = await createStrapiEntry({ userId, date, title, body: entryBody, mood });
+  } catch {
+    return { error: "Failed to create entry", status: 500 };
+  }
+
+  after(async () => {
+    const text = buildEmbeddingText({ date: created.date, title: created.title, body: created.body });
+    const embedding = await generateEmbedding(text);
+    if (!embedding) return;
+    const admin = createAdminClient();
+    await admin.from("entries").insert({
       id: randomUUID(),
       user_id: userId,
       date,
-      title,
-      body: entryBody,
-      mood,
-      created_at: now,
-      updated_at: now,
-    })
-    .select()
-    .single();
-
-  if (error) return { error: "Failed to create entry", status: 500 };
-  after(async () => {
-    const text = buildEmbeddingText({ date: data.date, title: data.title ?? null, body: data.body });
-    const embedding = await generateEmbedding(text);
-    if (!embedding) return;
-    await admin.from("entries").update({ embedding: JSON.stringify(embedding) }).eq("id", data.id);
+      title: created.title,
+      body: created.body,
+      mood: created.mood,
+      strapi_entry_id: created.id,
+      embedding: JSON.stringify(embedding),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
   });
-  return { data: { entry: rowToEntry(data), created: true } };
+
+  return { data: { entry: created, created: true } };
 }
 
 export async function getEntry(
@@ -214,16 +233,12 @@ export async function getEntry(
     return { error: "Invalid date format. Use YYYY-MM-DD.", status: 400 };
   }
 
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("entries")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("date", date)
-    .maybeSingle();
-
-  if (error) return { error: "Failed to fetch entry", status: 500 };
-  return { data: { entry: data ? rowToEntry(data) : null } };
+  try {
+    const entry = await findEntryByUserAndDate(userId, date);
+    return { data: { entry } };
+  } catch {
+    return { error: "Failed to fetch entry", status: 500 };
+  }
 }
 
 export function buildSearchContext(
@@ -262,14 +277,12 @@ export async function askAgent(
 
   const admin = createAdminClient();
 
-  const { data: entry, error: entryError } = await admin
-    .from("entries")
-    .select("id, date, title, body, mood")
-    .eq("user_id", userId)
-    .eq("date", date)
-    .maybeSingle();
-
-  if (entryError) return { error: "Failed to fetch entry", status: 500 };
+  let entry: StrapiEntry | null;
+  try {
+    entry = await findEntryByUserAndDate(userId, date);
+  } catch {
+    return { error: "Failed to fetch entry", status: 500 };
+  }
   if (!entry) {
     return {
       error: `No entry found for ${date}. Create an entry first using POST /api/v1/entries.`,
@@ -288,19 +301,19 @@ export async function askAgent(
     content: row.content as string,
   }));
 
-  const plainText = ((entry.body as string) ?? "").replace(/<[^>]+>/g, "").trim();
+  const plainText = (entry.body ?? "").replace(/<[^>]+>/g, "").trim();
 
   const searchResult = await hybridSearch(userId, message).catch(() => null);
   const searchContext =
     searchResult && "data" in searchResult
-      ? buildSearchContext(searchResult.data.results, entry.date as string)
+      ? buildSearchContext(searchResult.data.results, entry.date)
       : undefined;
 
   const systemPrompt = buildSystemPrompt({
-    date: entry.date as string,
-    title: (entry.title as string | null) ?? undefined,
+    date: entry.date,
+    title: entry.title ?? undefined,
     plainText,
-    mood: entry.mood as number,
+    mood: entry.mood,
     searchContext: searchContext || undefined,
   });
 
@@ -310,28 +323,7 @@ export async function askAgent(
     messages: [...history, { role: "user", content: message }],
     systemPrompt,
     anthropic,
-    fetchEntry: async (targetDate: string) => {
-      const { data: targetEntry } = await admin
-        .from("entries")
-        .select("date, title, body, mood")
-        .eq("user_id", userId)
-        .eq("date", targetDate)
-        .maybeSingle();
-
-      if (!targetEntry) return `No entry found for ${targetDate}.`;
-
-      const bodyText = ((targetEntry.body as string) ?? "").replace(/<[^>]+>/g, "").trim();
-      const moodLabel = MOOD_LABELS[targetEntry.mood as number] ?? String(targetEntry.mood);
-      return [
-        `Entry for ${targetEntry.date}:`,
-        targetEntry.title ? `Title: ${targetEntry.title}` : null,
-        `Mood: ${moodLabel} (${targetEntry.mood}/5)`,
-        "Content:",
-        bodyText || "(No content)",
-      ]
-        .filter(Boolean)
-        .join("\n");
-    },
+    fetchEntry: (targetDate: string) => getEntryForAgent(userId, targetDate),
   });
 
   await admin.from("chat_messages").insert([
