@@ -118,7 +118,7 @@ function ApiContent() {
           <h3 className="text-sm font-semibold">Response</h3>
           <ResponseBlock>{`{
   "entry": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "id": "x5k59nwlaaf4mzu2eyt9rjh3",
     "date": "2026-06-07",
     "title": "Good day",
     "body": "Finished the project. Feeling accomplished.",
@@ -127,6 +127,9 @@ function ApiContent() {
     "updatedAt": "2026-06-07T10:00:00.000Z"
   }
 }`}</ResponseBlock>
+          <Note>
+            <code>id</code> is an opaque string identifier — do not assume a UUID format.
+          </Note>
         </div>
 
         <div className="space-y-2">
@@ -271,7 +274,7 @@ function ApiContent() {
           <h3 className="text-sm font-semibold">Response — entry found</h3>
           <ResponseBlock>{`{
   "entry": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "id": "x5k59nwlaaf4mzu2eyt9rjh3",
     "date": "2026-06-07",
     "title": "Good day",
     "body": "Finished the project. Feeling accomplished.",
@@ -300,6 +303,90 @@ function ApiContent() {
               },
               { name: "401", type: "", description: "Missing or invalid token." },
               { name: "500", type: "", description: "Database error." },
+            ]}
+          />
+        </div>
+      </section>
+
+      <SectionDivider />
+
+      {/* Search */}
+      <section id="search" className="space-y-6 scroll-mt-8">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <MethodBadge method="POST" />
+            <code className="text-sm font-mono">/api/v1/search</code>
+          </div>
+          <h2 className="text-lg font-semibold mt-2">Search</h2>
+          <p className="text-sm text-muted-foreground">
+            Hybrid search across all your journal entries — combines semantic
+            (vector) similarity, full-text keyword matching, and always includes
+            the last 7 days for temporal context. Results are deduplicated and
+            tagged with which source(s) matched.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Request body</h3>
+          <ParamsTable
+            rows={[
+              {
+                name: "query",
+                type: "string",
+                required: true,
+                description: "Search query, in any language.",
+              },
+            ]}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Example request</h3>
+          <CodeBlock>{`curl -X POST ${BASE_URL}/api/v1/search \\
+  -H "Authorization: Bearer jour_<token>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "query": "feeling stuck on a project"
+  }'`}</CodeBlock>
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Response</h3>
+          <ResponseBlock>{`{
+  "results": [
+    {
+      "id": "x5k59nwlaaf4mzu2eyt9rjh3",
+      "date": "2026-06-07",
+      "title": "Good day",
+      "body": "Finished the project. Feeling accomplished.",
+      "mood": 4,
+      "sources": ["vector", "text"]
+    },
+    {
+      "id": "b8n21pqrstuv3wxyz0a1bcd4",
+      "date": "2026-07-25",
+      "title": null,
+      "body": "Another long day at work.",
+      "mood": null,
+      "sources": ["recent"]
+    }
+  ]
+}`}</ResponseBlock>
+          <Note>
+            <code>sources</code> shows which strategies matched — <code>vector</code>{" "}
+            (semantic similarity), <code>text</code> (full-text keyword match), and/or{" "}
+            <code>recent</code> (always includes the last 7 days). Results are sorted
+            by number of matching sources first, then by date.
+          </Note>
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Error codes</h3>
+          <ParamsTable
+            rows={[
+              { name: "400", type: "", description: "Missing or empty query." },
+              { name: "401", type: "", description: "Missing or invalid token." },
+              { name: "500", type: "", description: "Database or search provider error." },
             ]}
           />
         </div>
@@ -365,7 +452,7 @@ function McpContent() {
         <div>
           <h2 className="text-lg font-semibold">Available tools</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            The MCP server exposes three tools that mirror the REST API. All operations
+            The MCP server exposes five tools that mirror the REST API. All operations
             are scoped to the authenticated user.
           </p>
         </div>
@@ -401,13 +488,58 @@ function McpContent() {
               Returns
             </p>
             <ResponseBlock>{`{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "x5k59nwlaaf4mzu2eyt9rjh3",
   "date": "2026-06-07",
   "title": "Good day",
   "body": "Finished the project.",
   "mood": 4,
   "createdAt": "2026-06-07T10:00:00.000Z",
   "updatedAt": "2026-06-07T10:00:00.000Z"
+}`}</ResponseBlock>
+          </div>
+        </div>
+
+        <SectionDivider />
+
+        {/* update_entry */}
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <code className="text-sm font-mono font-semibold">update_entry</code>
+            <p className="text-sm text-muted-foreground">
+              Updates an existing journal entry for the given date. Only the fields
+              you provide are changed — omitted fields are left as-is. Use{" "}
+              <code className="text-xs font-mono">create_entry</code> when the entry
+              may not exist yet.
+            </p>
+          </div>
+          <ParamsTable
+            rows={[
+              {
+                name: "mood",
+                type: "integer",
+                description: "Mood from 1 (very bad) to 5 (great).",
+              },
+              { name: "title", type: "string", description: "Optional entry title." },
+              { name: "body", type: "string", description: "Entry text content." },
+              {
+                name: "date",
+                type: "string (YYYY-MM-DD)",
+                description: "Entry date. Defaults to today.",
+              },
+            ]}
+          />
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Returns
+            </p>
+            <ResponseBlock>{`{
+  "id": "x5k59nwlaaf4mzu2eyt9rjh3",
+  "date": "2026-06-07",
+  "title": "Good day",
+  "body": "Finished the project.",
+  "mood": 5,
+  "createdAt": "2026-06-07T10:00:00.000Z",
+  "updatedAt": "2026-06-07T11:30:00.000Z"
 }`}</ResponseBlock>
           </div>
         </div>
@@ -438,7 +570,7 @@ function McpContent() {
               Returns
             </p>
             <ResponseBlock>{`{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "x5k59nwlaaf4mzu2eyt9rjh3",
   "date": "2026-06-07",
   "title": "Good day",
   "body": "Finished the project.",
@@ -483,6 +615,46 @@ function McpContent() {
               Returns
             </p>
             <ResponseBlock>{`You finished the project — good. Now the question is what you do with the momentum. Seneca: 'While we wait for life to begin, life passes.' What's the next problem worth solving?`}</ResponseBlock>
+          </div>
+        </div>
+
+        <SectionDivider />
+
+        {/* search_entries */}
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <code className="text-sm font-mono font-semibold">search_entries</code>
+            <p className="text-sm text-muted-foreground">
+              Hybrid search across all journal entries — combines semantic (vector)
+              search, keyword (full-text) search, and always includes the last 7 days
+              for temporal context. Returns deduplicated results tagged with which
+              source(s) matched.
+            </p>
+          </div>
+          <ParamsTable
+            rows={[
+              {
+                name: "query",
+                type: "string",
+                required: true,
+                description: "Search query, in any language.",
+              },
+            ]}
+          />
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Returns
+            </p>
+            <ResponseBlock>{`[
+  {
+    "id": "x5k59nwlaaf4mzu2eyt9rjh3",
+    "date": "2026-06-07",
+    "title": "Good day",
+    "body": "Finished the project. Feeling accomplished.",
+    "mood": 4,
+    "sources": ["vector", "text"]
+  }
+]`}</ResponseBlock>
           </div>
         </div>
       </section>
@@ -555,6 +727,9 @@ export function DocsTabs() {
         <a href="#read" className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1 pl-2">
           Read Entry
         </a>
+        <a href="#search" className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1 pl-2">
+          Search
+        </a>
       </nav>
     </>
   );
@@ -575,10 +750,16 @@ export function DocsTabs() {
           create_entry
         </a>
         <a href="#mcp-tools" className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1 pl-2">
+          update_entry
+        </a>
+        <a href="#mcp-tools" className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1 pl-2">
           get_entry
         </a>
         <a href="#mcp-tools" className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1 pl-2">
           ask
+        </a>
+        <a href="#mcp-tools" className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1 pl-2">
+          search_entries
         </a>
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mt-4 mb-2">
           Security
