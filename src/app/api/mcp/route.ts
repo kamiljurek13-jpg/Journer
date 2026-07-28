@@ -16,12 +16,12 @@ function buildServer(userId: string): McpServer {
     {
       title: "Create Journal Entry",
       description:
-        "Creates a new journal entry for the given date. mood is required. " +
+        "Creates a new journal entry for the given date. mood is optional. " +
         "If an entry already exists for that date, only the provided fields are updated. " +
         "Use update_entry instead when you know the entry already exists and want to patch it.",
       inputSchema: {
-        mood: z.number().int().min(1).max(5).describe(
-          "Mood from 1 (very bad) to 5 (great). Required."
+        mood: z.number().int().min(1).max(5).optional().describe(
+          "Mood from 1 (very bad) to 5 (great). Optional."
         ),
         title: z.string().optional().describe("Optional entry title."),
         body: z.string().optional().describe("Entry text content."),
@@ -51,7 +51,7 @@ function buildServer(userId: string): McpServer {
       description:
         "Updates an existing journal entry for the given date. " +
         "Only the fields you provide are changed — omitted fields are left as-is. " +
-        "Use create_entry (which requires mood) when the entry may not exist yet.",
+        "Use create_entry when the entry may not exist yet.",
       inputSchema: {
         mood: z.number().int().min(1).max(5).optional().describe(
           "Mood from 1 (very bad) to 5 (great)."
@@ -115,7 +115,7 @@ function buildServer(userId: string): McpServer {
       description:
         "Sends a message to the Ryan Holiday (Stoic philosophy) AI agent in the context of " +
         "a journal entry. The agent uses the entry content and full conversation history for " +
-        "that day to respond. An entry must exist for the given date — call create_entry first if needed (mood is required).",
+        "that day to respond. An entry must exist for the given date — call create_entry first if needed.",
       inputSchema: {
         message: z.string().describe("Your question or message to the agent."),
         date: z.string().optional().describe(

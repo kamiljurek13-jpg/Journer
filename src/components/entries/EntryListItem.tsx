@@ -10,6 +10,7 @@ const MOOD_EMOJI: Record<number, string> = {
   4: "🙂",
   5: "😄",
 };
+const NO_MOOD_PLACEHOLDER = "–";
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, "");
@@ -34,7 +35,9 @@ export function EntryListItem({ entry }: EntryListItemProps) {
             </span>
             <span className="text-sm truncate">{excerpt}</span>
           </div>
-          <span className="text-xl ml-4 shrink-0">{MOOD_EMOJI[entry.mood]}</span>
+          <span className="text-xl ml-4 shrink-0">
+            {entry.mood !== null ? MOOD_EMOJI[entry.mood] : NO_MOOD_PLACEHOLDER}
+          </span>
         </CardContent>
       </Card>
     </Link>

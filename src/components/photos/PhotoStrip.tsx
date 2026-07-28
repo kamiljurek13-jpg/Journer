@@ -15,7 +15,7 @@ export function PhotoStrip({ photos, onDelete, readOnly = false }: PhotoStripPro
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
       {photos.map((photo) => (
-        <div key={photo.id} className="relative shrink-0 group">
+        <div key={photo.storagePath} className="relative shrink-0 group">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={photo.signedUrl}

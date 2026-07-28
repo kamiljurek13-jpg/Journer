@@ -31,7 +31,7 @@ export type SearchResultEntry = {
   date: string;
   title: string | null;
   body: string;
-  mood: number;
+  mood: number | null;
   sources: SearchSource[];
 };
 
@@ -62,8 +62,8 @@ export async function hybridSearch(
             user_id_param: userId,
             match_count: 30,
           })
-          .then((r) => (r.data ?? []) as Array<{ strapi_entry_id: string; date: string; mood: number }>)
-      : Promise.resolve([] as Array<{ strapi_entry_id: string; date: string; mood: number }>),
+          .then((r) => (r.data ?? []) as Array<{ strapi_entry_id: string; date: string; mood: number | null }>)
+      : Promise.resolve([] as Array<{ strapi_entry_id: string; date: string; mood: number | null }>),
 
     searchEntriesFullText(userId, trimmedQuery, 30).catch(() => []),
 
@@ -73,7 +73,7 @@ export async function hybridSearch(
   const resultMap = new Map<string, SearchResultEntry>();
 
   const addEntries = (
-    rows: Array<{ id: string; date: string; title?: string | null; body?: string; mood: number }>,
+    rows: Array<{ id: string; date: string; title?: string | null; body?: string; mood: number | null }>,
     source: SearchSource
   ) => {
     for (const row of rows) {
@@ -192,13 +192,9 @@ export async function createOrUpdateEntry(
     return { data: { entry: updated, created: false } };
   }
 
-  if (mood === undefined) {
-    return { error: "mood is required when creating a new entry", status: 400 };
-  }
-
   let created: StrapiEntry;
   try {
-    created = await createStrapiEntry({ userId, date, title, body: entryBody, mood });
+    created = await createStrapiEntry({ userId, date, title, body: entryBody, mood: mood ?? null });
   } catch {
     return { error: "Failed to create entry", status: 500 };
   }
@@ -253,12 +249,10 @@ export function buildSearchContext(
         .replace(/<[^>]+>/g, "")
         .trim()
         .slice(0, 400);
-      const mood = MOOD_LABELS[r.mood] ?? String(r.mood);
-      return [
-        `### ${r.date}${r.title ? ` — ${r.title}` : ""}`,
-        `Mood: ${mood} (${r.mood}/5)`,
-        body || "(No content)",
-      ].join("\n");
+      const moodLine = r.mood !== null ? `Mood: ${MOOD_LABELS[r.mood] ?? String(r.mood)} (${r.mood}/5)` : null;
+      return [`### ${r.date}${r.title ? ` — ${r.title}` : ""}`, moodLine, body || "(No content)"]
+        .filter(Boolean)
+        .join("\n");
     })
     .join("\n\n");
 }

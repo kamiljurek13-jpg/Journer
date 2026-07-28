@@ -4,7 +4,7 @@ interface EntryContext {
   date: string;
   title?: string;
   plainText: string;
-  mood: number;
+  mood: number | null;
   searchContext?: string;
 }
 
@@ -17,11 +17,12 @@ const MOOD_LABEL: Record<number, string> = {
 };
 
 function entryBlock(entry: EntryContext): string {
-  const moodLabel = MOOD_LABEL[entry.mood] ?? String(entry.mood);
+  const moodLine =
+    entry.mood !== null ? `Mood: ${MOOD_LABEL[entry.mood] ?? String(entry.mood)} (${entry.mood}/5)` : "";
   return `Current journal entry context:
 Date: ${entry.date}
 ${entry.title ? `Title: ${entry.title}` : ""}
-Mood: ${moodLabel} (${entry.mood}/5)
+${moodLine}
 Content:
 ${entry.plainText || "(No content)"}
 ${entry.searchContext ? `\n## Related journal entries (relevant to this conversation)\n${entry.searchContext}\n` : ""}

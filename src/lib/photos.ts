@@ -4,24 +4,6 @@ import type { EntryPhoto, EntryPhotoWithUrl } from "@/types/photo";
 const BUCKET = "JournerImages";
 const SIGNED_URL_TTL_SECONDS = 3600;
 
-type DbPhotoRow = {
-  id: string;
-  user_id: string;
-  date: string;
-  storage_path: string;
-  created_at: string;
-};
-
-function rowToPhoto(row: DbPhotoRow): EntryPhoto {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    date: row.date,
-    storagePath: row.storage_path,
-    createdAt: row.created_at,
-  };
-}
-
 async function getUserId(): Promise<string> {
   const {
     data: { user },
@@ -30,17 +12,47 @@ async function getUserId(): Promise<string> {
   return user.id;
 }
 
+async function getAccessToken(): Promise<string> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not authenticated");
+  return session.access_token;
+}
+
+async function fetchPhotosApi(date: string): Promise<string[]> {
+  const accessToken = await getAccessToken();
+  const res = await fetch(`/api/entries/photos?date=${encodeURIComponent(date)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch photos");
+  const { photos } = (await res.json()) as { photos: string[] };
+  return photos;
+}
+
+async function mutatePhotosApi(
+  method: "POST" | "DELETE",
+  date: string,
+  storagePath: string
+): Promise<string[]> {
+  const accessToken = await getAccessToken();
+  const res = await fetch("/api/entries/photos", {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ date, storagePath }),
+  });
+  if (!res.ok) throw new Error(method === "POST" ? "Failed to link photo" : "Failed to unlink photo");
+  const { photos } = (await res.json()) as { photos: string[] };
+  return photos;
+}
+
 export async function fetchPhotosForDate(date: string): Promise<EntryPhoto[]> {
   if (!date) return [];
-  const userId = await getUserId();
-  const { data, error } = await supabase
-    .from("entry_photos")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("date", date)
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return (data as DbPhotoRow[]).map(rowToPhoto);
+  const photos = await fetchPhotosApi(date);
+  return photos.map((storagePath) => ({ date, storagePath }));
 }
 
 export async function uploadPhoto(date: string, file: File): Promise<EntryPhoto> {
@@ -53,33 +65,23 @@ export async function uploadPhoto(date: string, file: File): Promise<EntryPhoto>
     .upload(storagePath, file, { contentType: file.type, upsert: false });
   if (uploadError) throw uploadError;
 
-  const { data, error: insertError } = await supabase
-    .from("entry_photos")
-    .insert({ user_id: userId, date, storage_path: storagePath })
-    .select()
-    .single();
-
-  if (insertError) {
+  try {
+    await mutatePhotosApi("POST", date, storagePath);
+  } catch (err) {
     await supabase.storage.from(BUCKET).remove([storagePath]);
-    throw insertError;
+    throw err;
   }
 
-  return rowToPhoto(data as DbPhotoRow);
+  return { date, storagePath };
 }
 
 export async function deletePhoto(photo: EntryPhoto): Promise<void> {
-  const userId = await getUserId();
   const { error: storageError } = await supabase.storage
     .from(BUCKET)
     .remove([photo.storagePath]);
   if (storageError) throw storageError;
 
-  const { error: dbError } = await supabase
-    .from("entry_photos")
-    .delete()
-    .eq("id", photo.id)
-    .eq("user_id", userId);
-  if (dbError) throw dbError;
+  await mutatePhotosApi("DELETE", photo.date, photo.storagePath);
 }
 
 export async function getSignedUrls(
@@ -97,14 +99,4 @@ export async function getSignedUrls(
     ...photo,
     signedUrl: data[i].signedUrl ?? "",
   }));
-}
-
-export async function fetchPhotoDateSet(): Promise<Set<string>> {
-  const userId = await getUserId();
-  const { data, error } = await supabase
-    .from("entry_photos")
-    .select("date")
-    .eq("user_id", userId);
-  if (error) throw error;
-  return new Set((data as { date: string }[]).map((r) => r.date));
 }

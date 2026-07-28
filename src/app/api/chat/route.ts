@@ -19,7 +19,7 @@ interface ChatRequestBody {
   entryBody: string;
   entryDate: string;
   entryTitle?: string;
-  entryMood: number;
+  entryMood: number | null;
   message: string;
   accessToken: string;
   persona?: PersonaId;

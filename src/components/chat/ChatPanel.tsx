@@ -21,7 +21,7 @@ interface EntryContext {
   date: string;
   title?: string;
   body: string;
-  mood: number;
+  mood: number | null;
 }
 
 interface ChatPanelProps {

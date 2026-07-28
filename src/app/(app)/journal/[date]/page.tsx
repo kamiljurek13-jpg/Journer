@@ -51,7 +51,7 @@ export default function EntryPage() {
     mood !== (entry?.mood ?? null);
 
   const bodyHasText = body.replace(/<[^>]+>/g, "").trim().length > 0;
-  const canSave = (bodyHasText || photos.length > 0) && mood !== null;
+  const canSave = bodyHasText || mood !== null;
 
   function handleAddPhotoClick() {
     fileInputRef.current?.click();
@@ -65,7 +65,7 @@ export default function EntryPage() {
   }
 
   async function handleSave() {
-    if (!entry || !canSave || !mood) return;
+    if (!entry || !canSave) return;
     setSaving(true);
     try {
       await saveEntry({

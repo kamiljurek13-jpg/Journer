@@ -1,25 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
 import { createOrUpdateEntry } from "@/lib/journal-ops";
 import { listAllEntries } from "@/lib/strapi-entries";
+import { getAuthenticatedUser } from "@/lib/api-session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-async function getAuthenticatedUser(request: Request) {
-  const accessToken = request.headers.get("Authorization")?.replace("Bearer ", "");
-  if (!accessToken) return null;
-
-  const userSupabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
-    { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
-  );
-
-  const {
-    data: { user },
-  } = await userSupabase.auth.getUser();
-  return user;
-}
 
 export async function GET(request: Request) {
   const user = await getAuthenticatedUser(request);

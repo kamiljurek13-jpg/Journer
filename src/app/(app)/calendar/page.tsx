@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEntries } from "@/hooks/useEntries";
-import { usePhotoDateSet } from "@/hooks/usePhotoDateSet";
 import { todayString } from "@/lib/dates";
 
 const DAY_LABELS = ["Pn", "Wt", "Śr", "Cz", "Pt", "Sb", "Nd"];
@@ -18,7 +17,6 @@ function toDateStr(d: Date): string {
 
 export default function CalendarPage() {
   const { entries } = useEntries();
-  const photoDates = usePhotoDateSet();
   const router = useRouter();
   const today = todayString();
 
@@ -37,8 +35,8 @@ export default function CalendarPage() {
   );
 
   const datesWithActivity = useMemo(
-    () => new Set([...entries.map((e) => e.date), ...photoDates]),
-    [entries, photoDates]
+    () => new Set(entries.map((e) => e.date)),
+    [entries]
   );
 
   const days = useMemo(() => {

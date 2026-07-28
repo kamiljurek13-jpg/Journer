@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useEntries } from "@/hooks/useEntries";
 import { useEntryPhotos } from "@/hooks/useEntryPhotos";
-import { usePhotoDateSet } from "@/hooks/usePhotoDateSet";
 import { EntryListItem } from "@/components/entries/EntryListItem";
 import { WeekStrip } from "@/components/entries/WeekStrip";
 import { PhotoStrip } from "@/components/photos/PhotoStrip";
@@ -32,7 +31,6 @@ export default function JournalPage() {
   const [editorKey, setEditorKey] = useState(0);
 
   const { photos, uploading, addPhoto, removePhoto } = useEntryPhotos(selectedDate);
-  const photoDates = usePhotoDateSet();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const entriesByDate = useMemo(
@@ -45,12 +43,16 @@ export default function JournalPage() {
     [entries]
   );
 
-  const datesWithActivity = useMemo(
-    () => new Set([...datesWithEntries, ...photoDates]),
-    [datesWithEntries, photoDates]
-  );
-
   const selectedEntry = entriesByDate.get(selectedDate) ?? null;
+
+  // A find-or-create on first photo upload can leave a bare entry (no text, no
+  // mood) behind — that's not "saved content" from the user's point of view, so
+  // it must still show the full edit form, not the read-only card.
+  const hasSavedContent =
+    !!selectedEntry &&
+    (selectedEntry.mood !== null ||
+      !!selectedEntry.title ||
+      selectedEntry.body.replace(/<[^>]+>/g, "").trim().length > 0);
 
   useEffect(() => {
     setTitle("");
@@ -71,10 +73,10 @@ export default function JournalPage() {
   }
 
   const bodyHasText = body.replace(/<[^>]+>/g, "").trim().length > 0;
-  const canSave = (bodyHasText || photos.length > 0) && mood !== null;
+  const canSave = bodyHasText || mood !== null;
 
   async function handleSave() {
-    if (!canSave || !mood) return;
+    if (!canSave) return;
     setSaving(true);
     try {
       await saveEntry({
@@ -106,10 +108,10 @@ export default function JournalPage() {
       <WeekStrip
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
-        datesWithEntries={datesWithActivity}
+        datesWithEntries={datesWithEntries}
       />
 
-      {selectedEntry ? (
+      {hasSavedContent && selectedEntry ? (
         <EntryListItem entry={selectedEntry} />
       ) : selectedDate <= today ? (
         <div className="flex flex-col gap-4">

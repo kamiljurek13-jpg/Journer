@@ -59,7 +59,7 @@ export function useEntryPhotos(date: string): UseEntryPhotosReturn {
   const removePhoto = useCallback(async (photo: EntryPhoto) => {
     try {
       await deletePhoto(photo);
-      setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      setPhotos((prev) => prev.filter((p) => p.storagePath !== photo.storagePath));
     } catch (e) {
       setError(String(e));
     }

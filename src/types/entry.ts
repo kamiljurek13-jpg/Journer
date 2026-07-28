@@ -5,7 +5,7 @@ export interface Entry {
   date: string;
   title?: string;
   body: string;
-  mood: Mood;
+  mood: Mood | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -85,9 +85,7 @@ function ApiContent() {
               {
                 name: "mood",
                 type: "integer",
-                required: true,
-                description:
-                  "Mood level from 1 (very bad) to 5 (great). Required when creating a new entry.",
+                description: "Optional mood level from 1 (very bad) to 5 (great).",
               },
               { name: "title", type: "string", description: "Optional entry title." },
               {
@@ -102,9 +100,6 @@ function ApiContent() {
               },
             ]}
           />
-          <p className="text-xs text-muted-foreground">
-            <span className="text-rose-500">*</span> required when creating a new entry
-          </p>
         </div>
 
         <div className="space-y-2">
@@ -141,8 +136,7 @@ function ApiContent() {
               {
                 name: "400",
                 type: "",
-                description:
-                  "Invalid date format, mood out of range, or mood missing for a new entry.",
+                description: "Invalid date format or mood out of range.",
               },
               { name: "401", type: "", description: "Missing or invalid token." },
               { name: "500", type: "", description: "Database error." },
@@ -391,9 +385,7 @@ function McpContent() {
               {
                 name: "mood",
                 type: "integer",
-                required: true,
-                description:
-                  "Mood from 1 (very bad) to 5 (great). Required when creating a new entry.",
+                description: "Optional mood from 1 (very bad) to 5 (great).",
               },
               { name: "title", type: "string", description: "Optional entry title." },
               { name: "body", type: "string", description: "Entry text content." },
@@ -404,9 +396,6 @@ function McpContent() {
               },
             ]}
           />
-          <p className="text-xs text-muted-foreground">
-            <span className="text-rose-500">*</span> required when creating a new entry
-          </p>
           <div className="space-y-1">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               Returns

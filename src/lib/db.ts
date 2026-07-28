@@ -6,7 +6,7 @@ type ApiEntry = {
   date: string;
   title: string | null;
   body: string;
-  mood: number;
+  mood: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -17,7 +17,7 @@ function toEntry(row: ApiEntry): Entry {
     date: row.date,
     title: row.title ?? undefined,
     body: row.body,
-    mood: row.mood as Mood,
+    mood: row.mood as Mood | null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -49,7 +49,7 @@ export async function saveEntryApi(input: {
   date: string;
   title?: string;
   body: string;
-  mood: number;
+  mood: number | null;
 }): Promise<Entry> {
   const accessToken = await getAccessToken();
   const res = await fetch("/api/entries", {

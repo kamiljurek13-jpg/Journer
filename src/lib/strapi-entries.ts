@@ -1,13 +1,19 @@
 import { strapiFetch } from "./strapi";
 import { MOOD_LABELS } from "./chat-agent";
 
+// photos is intentionally omitted from StrapiEntry (the public shape) — nothing
+// outside the photo-specific functions below needs to know an entry has photos.
+// It still exists on every raw Strapi response though, since Strapi returns all
+// attributes by default; the photo functions read it straight off this internal
+// record type instead of going through toStrapiEntry().
 type StrapiEntryRecord = {
   documentId: string;
   user_id: string;
   date: string;
   title: string | null;
   body: string;
-  mood: number;
+  mood: number | null;
+  photos: string[] | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -17,7 +23,7 @@ export type StrapiEntry = {
   date: string;
   title: string | null;
   body: string;
-  mood: number;
+  mood: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -27,7 +33,7 @@ export type SearchResultRow = {
   date: string;
   title: string | null;
   body: string;
-  mood: number;
+  mood: number | null;
 };
 
 function toStrapiEntry(record: StrapiEntryRecord): StrapiEntry {
@@ -42,16 +48,23 @@ function toStrapiEntry(record: StrapiEntryRecord): StrapiEntry {
   };
 }
 
-export async function findEntryByUserAndDate(
+async function findRawEntryByUserAndDate(
   userId: string,
   date: string
-): Promise<StrapiEntry | null> {
+): Promise<StrapiEntryRecord | null> {
   const params = new URLSearchParams({
     "filters[user_id][$eq]": userId,
     "filters[date][$eq]": date,
   });
   const res = await strapiFetch<{ data: StrapiEntryRecord[] }>(`/api/entries?${params}`);
-  const record = res.data[0];
+  return res.data[0] ?? null;
+}
+
+export async function findEntryByUserAndDate(
+  userId: string,
+  date: string
+): Promise<StrapiEntry | null> {
+  const record = await findRawEntryByUserAndDate(userId, date);
   return record ? toStrapiEntry(record) : null;
 }
 
@@ -85,7 +98,7 @@ export async function createStrapiEntry(input: {
   date: string;
   title: string | null;
   body: string;
-  mood: number;
+  mood: number | null;
 }): Promise<StrapiEntry> {
   const res = await strapiFetch<{ data: StrapiEntryRecord }>("/api/entries", {
     method: "POST",
@@ -104,7 +117,7 @@ export async function createStrapiEntry(input: {
 
 export async function updateStrapiEntry(
   documentId: string,
-  patch: Partial<{ title: string | null; body: string; mood: number }>
+  patch: Partial<{ title: string | null; body: string; mood: number | null }>
 ): Promise<StrapiEntry> {
   const res = await strapiFetch<{ data: StrapiEntryRecord }>(`/api/entries/${documentId}`, {
     method: "PUT",
@@ -155,14 +168,67 @@ export async function getEntryForAgent(userId: string, date: string): Promise<st
   if (!entry) return `No entry found for ${date}.`;
 
   const bodyText = (entry.body ?? "").replace(/<[^>]+>/g, "").trim();
-  const moodLabel = MOOD_LABELS[entry.mood] ?? String(entry.mood);
+  const moodLine =
+    entry.mood !== null ? `Mood: ${MOOD_LABELS[entry.mood] ?? String(entry.mood)} (${entry.mood}/5)` : null;
   return [
     `Entry for ${entry.date}:`,
     entry.title ? `Title: ${entry.title}` : null,
-    `Mood: ${moodLabel} (${entry.mood}/5)`,
+    moodLine,
     "Content:",
     bodyText || "(No content)",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+// --- Photo links -----------------------------------------------------------
+// Files live in Supabase Storage; Strapi's `photos` field holds only the
+// stable storage paths (never signed URLs, which expire in 1h). A photo can
+// be the first thing a user adds for a date, so these functions find-or-create
+// the entry themselves rather than assuming one already exists.
+
+export async function getPhotosForEntry(userId: string, date: string): Promise<string[]> {
+  const record = await findRawEntryByUserAndDate(userId, date);
+  return record?.photos ?? [];
+}
+
+export async function addPhotoToEntry(
+  userId: string,
+  date: string,
+  storagePath: string
+): Promise<string[]> {
+  const record = await findRawEntryByUserAndDate(userId, date);
+
+  if (!record) {
+    const res = await strapiFetch<{ data: StrapiEntryRecord }>("/api/entries", {
+      method: "POST",
+      body: JSON.stringify({
+        data: { user_id: userId, date, title: null, body: "", mood: null, photos: [storagePath] },
+      }),
+    });
+    return res.data.photos ?? [storagePath];
+  }
+
+  const photos = [...(record.photos ?? []), storagePath];
+  const res = await strapiFetch<{ data: StrapiEntryRecord }>(`/api/entries/${record.documentId}`, {
+    method: "PUT",
+    body: JSON.stringify({ data: { photos } }),
+  });
+  return res.data.photos ?? photos;
+}
+
+export async function removePhotoFromEntry(
+  userId: string,
+  date: string,
+  storagePath: string
+): Promise<string[]> {
+  const record = await findRawEntryByUserAndDate(userId, date);
+  if (!record) return [];
+
+  const photos = (record.photos ?? []).filter((p) => p !== storagePath);
+  const res = await strapiFetch<{ data: StrapiEntryRecord }>(`/api/entries/${record.documentId}`, {
+    method: "PUT",
+    body: JSON.stringify({ data: { photos } }),
+  });
+  return res.data.photos ?? photos;
 }
