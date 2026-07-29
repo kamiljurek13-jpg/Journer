@@ -231,6 +231,7 @@ Bucket **`JournerImages`** (prywatny). Ścieżka pliku: `{user_id}/{date}/{uuid}
 | **Supabase** | obie strony | REST + JS SDK, Storage | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (klient) + `SUPABASE_SECRET_KEY` (serwer) |
 | **Strapi CMS** (`journer-cms`, Railway) | wychodzący | REST v5, `/api/entries`, `/api/entry-search` | `STRAPI_API_TOKEN` (Custom scope, server-only) — patrz `src/lib/strapi.ts` |
 | **Zewnętrzny klient MCP** | przychodzący | `/api/mcp` Streamable HTTP | PAT `jour_*` w nagłówku `Authorization: Bearer` |
+| **PostHog** (EU Cloud) | wychodzący | Heatmaps + session replay, klient `posthog-js` (`src/lib/posthog-client.ts`) | `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` (klient) — ładowany dopiero po zgodzie w `CookieConsentBanner`; autocapture wyłączony, treść wpisów/czatu maskowana klasą `.ph-mask` (domyślny `maskTextClass` rrweb) |
 
 ### Zmienne środowiskowe
 
@@ -251,6 +252,8 @@ Bucket **`JournerImages`** (prywatny). Ścieżka pliku: `{user_id}/{date}/{uuid}
 | `STRAPI_API_URL` | URL wdrożonego Strapi (`https://strapi-production-a5e7.up.railway.app`) | tylko server |
 | `STRAPI_API_TOKEN` | Token API Strapi (Custom scope: CRUD Entry + entry-search) | tylko server |
 | `STRAPI_DATABASE_URL` | Bezpośrednie połączenie Postgres do bazy Strapi na Railway — **tylko** do jednorazowego `scripts/migrate-entries-to-strapi.mjs` (backfill `created_at`/`updated_at`), nieużywane przez działającą aplikację | tylko server, tylko lokalnie/skrypt |
+| `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` | Token projektu PostHog (EU Cloud) | publiczna |
+| `NEXT_PUBLIC_POSTHOG_HOST` | Ingestion host PostHog (`https://eu.i.posthog.com`) | publiczna |
 
 ---
 

@@ -33,7 +33,8 @@ export function EntryListItem({ entry }: EntryListItemProps) {
             <span className="text-xs text-muted-foreground">
               {formatShortDate(entry.date)}
             </span>
-            <span className="text-sm truncate">{excerpt}</span>
+            {/* ph-mask: redacts journal text from PostHog session replay */}
+            <span className="text-sm truncate ph-mask">{excerpt}</span>
           </div>
           <span className="text-xl ml-4 shrink-0">
             {entry.mood !== null ? MOOD_EMOJI[entry.mood] : NO_MOOD_PLACEHOLDER}

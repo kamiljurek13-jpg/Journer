@@ -290,7 +290,7 @@ export function ChatPanel({ entry }: ChatPanelProps) {
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`rounded-lg px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap ${
+                  className={`rounded-lg px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap ph-mask ${
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-foreground"
@@ -303,7 +303,7 @@ export function ChatPanel({ entry }: ChatPanelProps) {
 
             {streamingText && (
               <div className="flex justify-start">
-                <div className="rounded-lg px-3 py-2 text-sm max-w-[85%] bg-muted text-foreground whitespace-pre-wrap">
+                <div className="rounded-lg px-3 py-2 text-sm max-w-[85%] bg-muted text-foreground whitespace-pre-wrap ph-mask">
                   {streamingText}
                   <span className="inline-block w-1 h-3.5 ml-0.5 bg-foreground/50 animate-pulse rounded-sm" />
                 </div>

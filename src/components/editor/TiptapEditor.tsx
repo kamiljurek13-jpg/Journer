@@ -46,7 +46,10 @@ export function TiptapEditor({
           uploadingPhoto={uploadingPhoto}
         />
       )}
-      <EditorContent editor={editor} />
+      {/* ph-mask: redacts journal text from PostHog session replay */}
+      <div className="ph-mask">
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }
