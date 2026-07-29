@@ -58,18 +58,6 @@ export async function checkPersonaAccess(
   return { allowed: false, reason: "denied" };
 }
 
-export async function incrementTrialUsage(
-  userId: string,
-  persona: string
-): Promise<void> {
-  const admin = createAdminClient();
-  const { error } = await admin.rpc("increment_trial_usage", {
-    p_user_id: userId,
-    p_persona: persona,
-  });
-  if (error) throw error;
-}
-
 export async function tryConsumeTrialMessage(
   userId: string,
   persona: string

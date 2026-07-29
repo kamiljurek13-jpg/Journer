@@ -1,0 +1,12 @@
+-- Drop the last orphaned billing RPC function. increment_trial_usage was superseded by
+-- try_consume_trial_message (20260619200000_atomic_trial_consume.sql), which does an atomic
+-- check-and-consume instead of the plain increment here (no limit enforcement, TOCTOU-prone
+-- if it were ever called concurrently with a limit check). No application code has called
+-- incrementTrialUsage/.rpc("increment_trial_usage", ...) since that switch — confirmed by
+-- grep across src/, and the corresponding TS wrapper in billing.ts is removed in this same
+-- commit. SECURITY DEFINER was already stripped in 20260619100000_drop_security_definer.sql,
+-- so this was never independently exploitable like the 6 functions dropped in
+-- 20260707120000_drop_orphaned_billing_rpc_functions.sql — just dead code, flagged by
+-- get_advisors only for the low-severity function_search_path_mutable lint.
+-- Signature confirmed against the live project via pg_proc (not reconstructed from memory).
+DROP FUNCTION IF EXISTS public.increment_trial_usage(p_user_id uuid, p_persona text);

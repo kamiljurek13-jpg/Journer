@@ -32,12 +32,12 @@ graph TD
 
     BillingCheckoutRoute -->|"customers.create\ncheckout.sessions.create"| StripeService
     StripeService -->|"POST /api/webhooks/stripe\n(signed event)"| WebhookRoute["API: /api/webhooks/stripe"]
-    WebhookRoute -->|"complete_purchase RPC"| SupaDB
+    WebhookRoute -->|"completePurchase (billing-db.ts)"| SupaDB
 
-    BillingAccessRoute -->|"get_user_billing_access RPC"| SupaDB
-    BillingCheckoutRoute -->|"check/upsert RPC"| SupaDB
+    BillingAccessRoute -->|"getUserAccess (billing-db.ts)"| SupaDB
+    BillingCheckoutRoute -->|"check/upsert (billing-db.ts)"| SupaDB
 
-    ChatRoute -->|"checkPersonaAccess RPC\nincrementTrialUsage RPC"| SupaDB
+    ChatRoute -->|"checkPersonaAccess RPC\ntryConsumeTrialMessage RPC"| SupaDB
     ChatRoute -->|"streaming messages.stream"| AnthropicAPI["Anthropic API\nclaude-sonnet-4-6"]
     ChatRoute -->|"INSERT chat_messages"| SupaDB
     ChatRoute -->|"getEntryForAgent / hybridSearch\n(journal-ops.ts)"| JournalOps["journal-ops.ts\n(broker logic)"]
@@ -111,7 +111,7 @@ graph TD
 | `chat-agent.ts` | Pętla agenta non-streaming; definicja narzędzia `get_entry` (implementację fetchowania wpisu dostaje jako callback od wywołującego) |
 | `chatSystemPrompt.ts` | Buduje system prompt wybranej persony (Ryan / Jung / Watts) |
 | `personas.ts` | Konfiguracja trzech person: `ryan` (unlocked), `jung`, `watts` (premium) |
-| `billing.ts` | Logika billingowa: `getUserAccess`, `checkPersonaAccess`, `incrementTrialUsage`, lazy `getStripe()` |
+| `billing.ts` | Logika billingowa: `getUserAccess`, `checkPersonaAccess`, `tryConsumeTrialMessage`, lazy `getStripe()` |
 | `billing-db.ts` | Niskopoziomowe operacje billing przez admin client: RPC calls do schematu `billing` |
 | `embeddings.ts` | Generuje embeddingi przez OpenAI `text-embedding-3-small` |
 | `api-auth.ts` | Walidacja PAT: format `jour_*`, lookup SHA-256 w `api_tokens` |
@@ -182,14 +182,9 @@ Schemat niedostępny przez PostgREST (brak ekspozycji). Dostęp wyłącznie prze
 
 | Funkcja | Opis |
 |---|---|
-| `get_user_billing_access(p_user_id)` | Zwraca `(persona, is_purchased, message_count)` dla jung i watts |
-| `increment_trial_usage(p_user_id, p_persona)` | Atomowy upsert-increment licznika trialu |
-| `try_consume_trial_message(p_user_id, p_persona, p_limit)` | Atomowy check-and-consume trialu — zwraca `bool` (true = wiadomość zużyta, false = limit wyczerpany). Zapobiega wyścigowi TOCTOU. |
-| `check_existing_purchase(p_user_id, p_persona)` | Sprawdza czy istnieje completed purchase |
-| `upsert_stripe_customer(p_user_id, p_stripe_customer_id)` | Zapisuje customer ID |
-| `get_stripe_customer_id(p_user_id)` | Zwraca stripe_customer_id użytkownika |
-| `upsert_pending_purchase(...)` | Tworzy lub nadpisuje pending purchase |
-| `complete_purchase(p_session_id, p_user_id, p_payment_intent_id)` | Markuje purchase jako completed po webhook |
+| `try_consume_trial_message(p_user_id, p_persona, p_limit)` | Atomowy check-and-consume trialu — zwraca `bool` (true = wiadomość zużyta, false = limit wyczerpany). Zapobiega wyścigowi TOCTOU. Jedyna pozostała funkcja RPC dla billingu. |
+
+Pozostałe operacje billingowe (purchases/customers: check/upsert/complete) idą przez bezpośrednie `.schema("billing")` zapytania w `billing-db.ts`, **nie** przez RPC — sześć RPC-wrapperów (`check_existing_purchase`, `complete_purchase`, `get_stripe_customer_id`, `get_user_billing_access`, `upsert_pending_purchase`, `upsert_stripe_customer`) zostało usuniętych 2026-07-07 jako martwy, wykonywalny przez `anon`/`authenticated` kod (IDOR — patrz `20260707120000_drop_orphaned_billing_rpc_functions.sql`). `increment_trial_usage` (zastąpiona przez `try_consume_trial_message`) usunięta analogicznie 2026-07-29 (`20260729120000_drop_orphaned_increment_trial_usage.sql`) — nie była już wtedy exploitowalna (SECURITY DEFINER zdjęty wcześniej), ale zostawała jako martwy kod.
 
 ### Indeksy wyszukiwania
 
@@ -288,10 +283,10 @@ Bucket **`JournerImages`** (prywatny). Ścieżka pliku: `{user_id}/{date}/{uuid}
 
 1. Użytkownik klika locked personę → `PersonaUpgradeModal` z info o trialu.
 2. Kliknięcie „Kup dostęp" → `POST /api/billing/checkout` z `{ persona, accessToken, returnPath }`.
-3. Serwer tworzy/pobiera Stripe customer, tworzy Checkout Session, zapisuje pending purchase przez RPC.
+3. Serwer tworzy/pobiera Stripe customer, tworzy Checkout Session, zapisuje pending purchase przez `billing-db.ts` (bezpośrednie zapytanie, nie RPC).
 4. Frontend przekierowuje do Stripe Checkout (`checkoutUrl`).
 5. Po płatności → Stripe wywołuje `POST /api/webhooks/stripe` (signed event).
-6. Webhook weryfikuje podpis, wywołuje `complete_purchase` RPC → status = 'completed'.
+6. Webhook weryfikuje podpis, wywołuje `completePurchase` (`billing-db.ts`) → status = 'completed'.
 7. Stripe przekierowuje użytkownika na `returnPath?purchase=success&persona=jung`.
 8. `ChatPanel` odświeża `accessInfo` z `/api/billing/access` → persona unlocked.
 
