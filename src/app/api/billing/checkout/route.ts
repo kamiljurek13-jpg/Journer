@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     await upsertStripeCustomer(admin, user.id, stripeCustomerId);
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 
   const session = await stripe.checkout.sessions.create({
     customer: stripeCustomerId,
