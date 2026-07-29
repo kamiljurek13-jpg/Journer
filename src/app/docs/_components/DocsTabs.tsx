@@ -375,8 +375,10 @@ function ApiContent() {
           <Note>
             <code>sources</code> shows which strategies matched — <code>vector</code>{" "}
             (semantic similarity), <code>text</code> (full-text keyword match), and/or{" "}
-            <code>recent</code> (always includes the last 7 days). Results are sorted
-            by number of matching sources first, then by date.
+            <code>recent</code> (always includes the last 7 days). Results are ranked
+            with Reciprocal Rank Fusion: each matching leg contributes 1/(60 + rank)
+            to an entry&apos;s score, so an entry ranking well across multiple legs
+            outranks one that only tops a single leg.
           </Note>
         </div>
 

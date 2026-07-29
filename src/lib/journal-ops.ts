@@ -41,6 +41,20 @@ function recentCutoffDate(): string {
   return d.toISOString().split("T")[0];
 }
 
+// Reciprocal Rank Fusion: score(d) = sum over legs containing d of 1/(k + rank).
+// k=60 is the standard smoothing constant (used by Elasticsearch/Azure AI Search)
+// — it flattens the gap between rank 1 and rank 2 so one leg's top hit can't
+// dominate an entry that ranks solidly across multiple legs.
+const RRF_K = 60;
+
+function rrfRankMap(ids: string[]): Map<string, number> {
+  const ranks = new Map<string, number>();
+  ids.forEach((id, index) => {
+    if (!ranks.has(id)) ranks.set(id, index + 1); // 1-indexed; first occurrence wins
+  });
+  return ranks;
+}
+
 export async function hybridSearch(
   userId: string,
   query: string
@@ -126,8 +140,18 @@ export async function hybridSearch(
     }
   }
 
+  const vectorRanks = rrfRankMap(vectorRows.map((r) => r.strapi_entry_id));
+  const textRanks = rrfRankMap(textRows.map((r) => r.strapi_entry_id));
+  const recentRanks = rrfRankMap(recentRows.map((r) => r.id));
+
+  const rrfScore = (id: string): number => {
+    const contribution = (rank: number | undefined) => (rank === undefined ? 0 : 1 / (RRF_K + rank));
+    return contribution(vectorRanks.get(id)) + contribution(textRanks.get(id)) + contribution(recentRanks.get(id));
+  };
+
   const results = Array.from(resultMap.values()).sort((a, b) => {
-    if (b.sources.length !== a.sources.length) return b.sources.length - a.sources.length;
+    const scoreDiff = rrfScore(b.id) - rrfScore(a.id);
+    if (scoreDiff !== 0) return scoreDiff;
     return b.date.localeCompare(a.date);
   });
 
