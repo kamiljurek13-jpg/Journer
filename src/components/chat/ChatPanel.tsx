@@ -94,6 +94,36 @@ export function ChatPanel({ entry }: ChatPanelProps) {
     });
   }, []);
 
+  useEffect(() => {
+    // Webhook write can lag behind the Stripe redirect, so poll briefly
+    // until the purchase actually shows up as unlocked instead of trusting
+    // the redirect URL alone.
+    if (!purchaseSuccess || !accessToken) return;
+    let cancelled = false;
+
+    async function pollAccessInfo() {
+      for (let attempt = 0; attempt < 6 && !cancelled; attempt++) {
+        try {
+          const res = await fetch("/api/billing/access", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (cancelled) return;
+            setAccessInfo(data);
+            if (data?.[purchaseSuccess as PremiumPersona]?.unlocked) return;
+          }
+        } catch {}
+        if (!cancelled) await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+
+    pollAccessInfo();
+    return () => {
+      cancelled = true;
+    };
+  }, [purchaseSuccess, accessToken]);
+
   async function handleSend() {
     if (!input.trim() || !entry || streaming) return;
 
